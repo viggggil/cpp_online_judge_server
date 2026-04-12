@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/oj_server.dir/services/oj_server/main.cpp.o CMakeFiles/oj_server.dir/services/oj_server/routes.cpp.o CMakeFiles/oj_server.dir/services/oj_server/judge_service.cpp.o CMakeFiles/oj_server.dir/services/oj_server/problem_repository.cpp.o -o oj_server 
