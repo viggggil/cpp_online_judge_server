@@ -1,12 +1,22 @@
 #pragma once
 
-#include "common/platform_types.h"
+#include "common/protocol.hpp"
+
+#include <filesystem>
+#include <string>
 
 namespace oj::worker {
 
 class JudgeCore {
 public:
-    oj::common::SubmissionResult judge(const oj::common::SubmissionRequest& request) const;
+    oj::protocol::JudgeResponse judge(const oj::protocol::JudgeRequest& request) const;
+
+private:
+    std::filesystem::path prepare_work_directory(std::int64_t submission_id) const;
+    oj::protocol::TestCaseResult run_single_testcase(const std::string& executable_path,
+                                                     const oj::protocol::TestCase& test_case) const;
+    void summarize_results(oj::protocol::JudgeResponse& response) const;
+    static std::string normalize_output(std::string text);
 };
 
 } // namespace oj::worker
