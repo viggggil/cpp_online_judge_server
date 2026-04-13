@@ -16,6 +16,20 @@ namespace oj::server {
 
 namespace {
 
+std::filesystem::path resolve_runtime_path(std::filesystem::path path) {
+    if (path.is_absolute()) {
+        return path;
+    }
+
+    const auto direct_parent = path.parent_path();
+    if (direct_parent.empty() || std::filesystem::exists(direct_parent)) {
+        return path;
+    }
+
+    const auto nested = std::filesystem::path{"oj_platform"} / path;
+    return nested;
+}
+
 std::int64_t parse_problem_id(const std::string& problem_id_text) {
     return std::stoll(problem_id_text);
 }
@@ -154,7 +168,7 @@ oj::common::SubmissionResult parse_submission_record(const crow::json::rvalue& j
 JudgeService::JudgeService(std::filesystem::path problems_root,
                            std::filesystem::path submissions_root)
     : problems_root_(std::move(problems_root)),
-      submissions_root_(std::move(submissions_root)) {}
+      submissions_root_(resolve_runtime_path(std::move(submissions_root))) {}
 
 oj::common::SubmissionResult JudgeService::submit(const oj::common::SubmissionRequest& request) const {
     const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();

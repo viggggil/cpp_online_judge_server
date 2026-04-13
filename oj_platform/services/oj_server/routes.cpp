@@ -14,6 +14,19 @@ namespace oj::server {
 
 namespace {
 
+std::filesystem::path resolve_web_path(const std::filesystem::path& relative_path) {
+    if (std::filesystem::exists(relative_path)) {
+        return relative_path;
+    }
+
+    const auto nested = std::filesystem::path{"oj_platform"} / relative_path;
+    if (std::filesystem::exists(nested)) {
+        return nested;
+    }
+
+    return relative_path;
+}
+
 std::string read_text_file(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::in | std::ios::binary);
     if (!input) {
@@ -110,23 +123,23 @@ crow::json::wvalue make_submission_json(const oj::common::SubmissionResult& resu
 
 void register_routes(crow::Crow<>& app) {
     CROW_ROUTE(app, "/")([] {
-        return serve_file(std::filesystem::path{"web"} / "index.html");
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "index.html"));
     });
 
     CROW_ROUTE(app, "/problems/<int>")([](std::int64_t) {
-        return serve_file(std::filesystem::path{"web"} / "problem.html");
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "problem.html"));
     });
 
     CROW_ROUTE(app, "/submit/<int>")([](std::int64_t) {
-        return serve_file(std::filesystem::path{"web"} / "submit.html");
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "submit.html"));
     });
 
     CROW_ROUTE(app, "/submissions/<string>")([](const std::string&) {
-        return serve_file(std::filesystem::path{"web"} / "submission.html");
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "submission.html"));
     });
 
     CROW_ROUTE(app, "/web/<path>")([](const std::string& file_path) {
-        return serve_file(std::filesystem::path{"web"} / file_path);
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / file_path));
     });
 
     CROW_ROUTE(app, "/api/health")([] {

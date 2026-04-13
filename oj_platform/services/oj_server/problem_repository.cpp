@@ -14,6 +14,19 @@ namespace oj::server {
 
 namespace {
 
+std::filesystem::path resolve_problem_root(std::filesystem::path root) {
+    if (std::filesystem::exists(root)) {
+        return root;
+    }
+
+    const auto nested = std::filesystem::path{"oj_platform"} / root;
+    if (std::filesystem::exists(nested)) {
+        return nested;
+    }
+
+    return root;
+}
+
 std::string read_text_file(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::in | std::ios::binary);
     if (!input) {
@@ -94,7 +107,7 @@ std::vector<oj::protocol::TestCase> load_test_cases_from_directory(const std::fi
 } // namespace
 
 ProblemRepository::ProblemRepository(std::filesystem::path root)
-    : root_(std::move(root)) {}
+    : root_(resolve_problem_root(std::move(root))) {}
 
 std::vector<oj::common::ProblemSummary> ProblemRepository::list() const {
     std::vector<oj::common::ProblemSummary> items;
