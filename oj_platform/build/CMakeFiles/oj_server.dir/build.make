@@ -140,6 +140,7 @@ oj_server: CMakeFiles/oj_server.dir/services/oj_server/routes.cpp.o
 oj_server: CMakeFiles/oj_server.dir/services/oj_server/judge_service.cpp.o
 oj_server: CMakeFiles/oj_server.dir/services/oj_server/problem_repository.cpp.o
 oj_server: CMakeFiles/oj_server.dir/build.make
+oj_server: liboj_judge_core.a
 oj_server: CMakeFiles/oj_server.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/max85/webserver/oj_platform/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable oj_server"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/oj_server.dir/link.txt --verbose=$(VERBOSE)

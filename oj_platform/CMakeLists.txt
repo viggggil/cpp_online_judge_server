@@ -10,6 +10,14 @@ option(OJ_PLATFORM_BUILD_TESTS "Build oj_platform tests" OFF)
 
 add_subdirectory(third_party/crow)
 
+add_library(oj_judge_core
+    services/judge_worker/judge_core.cpp
+    services/judge_worker/compile_service.cpp
+    services/judge_worker/run_service.cpp
+)
+
+target_include_directories(oj_judge_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_executable(oj_server
     services/oj_server/main.cpp
     services/oj_server/routes.cpp
@@ -18,15 +26,12 @@ add_executable(oj_server
 )
 
 target_include_directories(oj_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(oj_server PRIVATE Crow::Crow)
+target_link_libraries(oj_server PRIVATE Crow::Crow oj_judge_core)
 
 add_executable(judge_worker
     services/judge_worker/main.cpp
     services/judge_worker/routes.cpp
-    services/judge_worker/judge_core.cpp
-    services/judge_worker/compile_service.cpp
-    services/judge_worker/run_service.cpp
 )
 
 target_include_directories(judge_worker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(judge_worker PRIVATE Crow::Crow)
+target_link_libraries(judge_worker PRIVATE Crow::Crow oj_judge_core)

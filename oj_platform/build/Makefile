@@ -182,6 +182,19 @@ depend:
 .PHONY : depend
 
 #=============================================================================
+# Target rules for targets named oj_judge_core
+
+# Build rule for target.
+oj_judge_core: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 oj_judge_core
+.PHONY : oj_judge_core
+
+# fast build rule for target.
+oj_judge_core/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/build
+.PHONY : oj_judge_core/fast
+
+#=============================================================================
 # Target rules for targets named oj_server
 
 # Build rule for target.
@@ -225,7 +238,7 @@ services/judge_worker/compile_service.o: services/judge_worker/compile_service.c
 
 # target to build an object file
 services/judge_worker/compile_service.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/judge_worker.dir/build.make CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/services/judge_worker/compile_service.cpp.o
 .PHONY : services/judge_worker/compile_service.cpp.o
 
 services/judge_worker/compile_service.i: services/judge_worker/compile_service.cpp.i
@@ -233,7 +246,7 @@ services/judge_worker/compile_service.i: services/judge_worker/compile_service.c
 
 # target to preprocess a source file
 services/judge_worker/compile_service.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/judge_worker.dir/build.make CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/services/judge_worker/compile_service.cpp.i
 .PHONY : services/judge_worker/compile_service.cpp.i
 
 services/judge_worker/compile_service.s: services/judge_worker/compile_service.cpp.s
@@ -241,7 +254,7 @@ services/judge_worker/compile_service.s: services/judge_worker/compile_service.c
 
 # target to generate assembly for a file
 services/judge_worker/compile_service.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/judge_worker.dir/build.make CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/services/judge_worker/compile_service.cpp.s
 .PHONY : services/judge_worker/compile_service.cpp.s
 
 services/judge_worker/judge_core.o: services/judge_worker/judge_core.cpp.o
@@ -249,7 +262,7 @@ services/judge_worker/judge_core.o: services/judge_worker/judge_core.cpp.o
 
 # target to build an object file
 services/judge_worker/judge_core.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/judge_worker.dir/build.make CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/services/judge_worker/judge_core.cpp.o
 .PHONY : services/judge_worker/judge_core.cpp.o
 
 services/judge_worker/judge_core.i: services/judge_worker/judge_core.cpp.i
@@ -257,7 +270,7 @@ services/judge_worker/judge_core.i: services/judge_worker/judge_core.cpp.i
 
 # target to preprocess a source file
 services/judge_worker/judge_core.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/judge_worker.dir/build.make CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/services/judge_worker/judge_core.cpp.i
 .PHONY : services/judge_worker/judge_core.cpp.i
 
 services/judge_worker/judge_core.s: services/judge_worker/judge_core.cpp.s
@@ -265,7 +278,7 @@ services/judge_worker/judge_core.s: services/judge_worker/judge_core.cpp.s
 
 # target to generate assembly for a file
 services/judge_worker/judge_core.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/judge_worker.dir/build.make CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/services/judge_worker/judge_core.cpp.s
 .PHONY : services/judge_worker/judge_core.cpp.s
 
 services/judge_worker/main.o: services/judge_worker/main.cpp.o
@@ -321,7 +334,7 @@ services/judge_worker/run_service.o: services/judge_worker/run_service.cpp.o
 
 # target to build an object file
 services/judge_worker/run_service.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/judge_worker.dir/build.make CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/services/judge_worker/run_service.cpp.o
 .PHONY : services/judge_worker/run_service.cpp.o
 
 services/judge_worker/run_service.i: services/judge_worker/run_service.cpp.i
@@ -329,7 +342,7 @@ services/judge_worker/run_service.i: services/judge_worker/run_service.cpp.i
 
 # target to preprocess a source file
 services/judge_worker/run_service.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/judge_worker.dir/build.make CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/services/judge_worker/run_service.cpp.i
 .PHONY : services/judge_worker/run_service.cpp.i
 
 services/judge_worker/run_service.s: services/judge_worker/run_service.cpp.s
@@ -337,7 +350,7 @@ services/judge_worker/run_service.s: services/judge_worker/run_service.cpp.s
 
 # target to generate assembly for a file
 services/judge_worker/run_service.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/judge_worker.dir/build.make CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/services/judge_worker/run_service.cpp.s
 .PHONY : services/judge_worker/run_service.cpp.s
 
 services/oj_server/judge_service.o: services/oj_server/judge_service.cpp.o
@@ -452,6 +465,7 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... uninstall"
 	@echo "... judge_worker"
+	@echo "... oj_judge_core"
 	@echo "... oj_server"
 	@echo "... services/judge_worker/compile_service.o"
 	@echo "... services/judge_worker/compile_service.i"

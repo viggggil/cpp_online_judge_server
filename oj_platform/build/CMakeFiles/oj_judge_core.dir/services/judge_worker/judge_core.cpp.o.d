@@ -1,8 +1,7 @@
-CMakeFiles/oj_server.dir/services/oj_server/judge_service.cpp.o: \
- /home/max85/webserver/oj_platform/services/oj_server/judge_service.cpp \
+CMakeFiles/oj_judge_core.dir/services/judge_worker/judge_core.cpp.o: \
+ /home/max85/webserver/oj_platform/services/judge_worker/judge_core.cpp \
  /usr/include/stdc-predef.h \
- /home/max85/webserver/oj_platform/services/oj_server/judge_service.h \
- /home/max85/webserver/oj_platform/common/platform_types.h \
+ /home/max85/webserver/oj_platform/services/judge_worker/judge_core.h \
  /home/max85/webserver/oj_platform/common/protocol.hpp \
  /usr/include/c++/13/cstdint \
  /usr/include/x86_64-linux-gnu/c++/13/bits/c++config.h \
@@ -181,11 +180,15 @@ CMakeFiles/oj_server.dir/services/oj_server/judge_service.cpp.o: \
  /usr/include/c++/13/bits/unique_ptr.h \
  /usr/include/c++/13/ext/aligned_buffer.h \
  /usr/include/c++/13/bits/fs_dir.h /usr/include/c++/13/bits/fs_ops.h \
- /home/max85/webserver/oj_platform/services/judge_worker/judge_core.h \
- /home/max85/webserver/oj_platform/services/oj_server/problem_repository.h \
- /usr/include/c++/13/optional \
- /usr/include/c++/13/bits/enable_special_members.h \
- /usr/include/c++/13/chrono /usr/include/c++/13/fstream \
+ /home/max85/webserver/oj_platform/services/judge_worker/compile_service.h \
+ /home/max85/webserver/oj_platform/services/judge_worker/run_service.h \
+ /usr/include/c++/13/algorithm /usr/include/c++/13/bits/stl_algo.h \
+ /usr/include/c++/13/bits/algorithmfwd.h \
+ /usr/include/c++/13/bits/stl_heap.h \
+ /usr/include/c++/13/bits/uniform_int_dist.h \
+ /usr/include/c++/13/bits/stl_tempbuf.h \
+ /usr/include/c++/13/pstl/glue_algorithm_defs.h \
+ /usr/include/c++/13/pstl/execution_defs.h /usr/include/c++/13/fstream \
  /usr/include/x86_64-linux-gnu/c++/13/bits/basic_file.h \
  /usr/include/x86_64-linux-gnu/c++/13/bits/c++io.h \
  /usr/include/c++/13/bits/fstream.tcc

@@ -1,3 +1,4 @@
+/home/max85/webserver/oj_platform/build/CMakeFiles/oj_judge_core.dir
 /home/max85/webserver/oj_platform/build/CMakeFiles/oj_server.dir
 /home/max85/webserver/oj_platform/build/CMakeFiles/judge_worker.dir
 /home/max85/webserver/oj_platform/build/CMakeFiles/package.dir

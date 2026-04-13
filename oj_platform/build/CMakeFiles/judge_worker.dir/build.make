@@ -97,67 +97,20 @@ CMakeFiles/judge_worker.dir/services/judge_worker/routes.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/judge_worker.dir/services/judge_worker/routes.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/max85/webserver/oj_platform/services/judge_worker/routes.cpp -o CMakeFiles/judge_worker.dir/services/judge_worker/routes.cpp.s
 
-CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.o: CMakeFiles/judge_worker.dir/flags.make
-CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.o: /home/max85/webserver/oj_platform/services/judge_worker/judge_core.cpp
-CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.o: CMakeFiles/judge_worker.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/max85/webserver/oj_platform/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.o -MF CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.o.d -o CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.o -c /home/max85/webserver/oj_platform/services/judge_worker/judge_core.cpp
-
-CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/max85/webserver/oj_platform/services/judge_worker/judge_core.cpp > CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.i
-
-CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/max85/webserver/oj_platform/services/judge_worker/judge_core.cpp -o CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.s
-
-CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.o: CMakeFiles/judge_worker.dir/flags.make
-CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.o: /home/max85/webserver/oj_platform/services/judge_worker/compile_service.cpp
-CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.o: CMakeFiles/judge_worker.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/max85/webserver/oj_platform/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.o -MF CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.o.d -o CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.o -c /home/max85/webserver/oj_platform/services/judge_worker/compile_service.cpp
-
-CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/max85/webserver/oj_platform/services/judge_worker/compile_service.cpp > CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.i
-
-CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/max85/webserver/oj_platform/services/judge_worker/compile_service.cpp -o CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.s
-
-CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.o: CMakeFiles/judge_worker.dir/flags.make
-CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.o: /home/max85/webserver/oj_platform/services/judge_worker/run_service.cpp
-CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.o: CMakeFiles/judge_worker.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/max85/webserver/oj_platform/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.o -MF CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.o.d -o CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.o -c /home/max85/webserver/oj_platform/services/judge_worker/run_service.cpp
-
-CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/max85/webserver/oj_platform/services/judge_worker/run_service.cpp > CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.i
-
-CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/max85/webserver/oj_platform/services/judge_worker/run_service.cpp -o CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.s
-
 # Object files for target judge_worker
 judge_worker_OBJECTS = \
 "CMakeFiles/judge_worker.dir/services/judge_worker/main.cpp.o" \
-"CMakeFiles/judge_worker.dir/services/judge_worker/routes.cpp.o" \
-"CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.o" \
-"CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.o" \
-"CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.o"
+"CMakeFiles/judge_worker.dir/services/judge_worker/routes.cpp.o"
 
 # External object files for target judge_worker
 judge_worker_EXTERNAL_OBJECTS =
 
 judge_worker: CMakeFiles/judge_worker.dir/services/judge_worker/main.cpp.o
 judge_worker: CMakeFiles/judge_worker.dir/services/judge_worker/routes.cpp.o
-judge_worker: CMakeFiles/judge_worker.dir/services/judge_worker/judge_core.cpp.o
-judge_worker: CMakeFiles/judge_worker.dir/services/judge_worker/compile_service.cpp.o
-judge_worker: CMakeFiles/judge_worker.dir/services/judge_worker/run_service.cpp.o
 judge_worker: CMakeFiles/judge_worker.dir/build.make
+judge_worker: liboj_judge_core.a
 judge_worker: CMakeFiles/judge_worker.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/max85/webserver/oj_platform/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Linking CXX executable judge_worker"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/max85/webserver/oj_platform/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Linking CXX executable judge_worker"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/judge_worker.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

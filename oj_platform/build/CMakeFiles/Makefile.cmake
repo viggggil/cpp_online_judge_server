@@ -64,6 +64,7 @@ set(CMAKE_MAKEFILE_PRODUCTS
 
 # Dependency information for all targets:
 set(CMAKE_DEPEND_INFO_FILES
+  "CMakeFiles/oj_judge_core.dir/DependInfo.cmake"
   "CMakeFiles/oj_server.dir/DependInfo.cmake"
   "CMakeFiles/judge_worker.dir/DependInfo.cmake"
   "third_party/crow/CMakeFiles/uninstall.dir/DependInfo.cmake"
