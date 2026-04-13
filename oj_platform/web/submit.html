@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>提交代码</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <a class="back-link" id="problem-link" href="#">← 返回题目</a>
+    <div class="card">
+      <h1>提交代码</h1>
+      <div id="problem-info" class="meta"></div>
+      <label class="label" for="language">语言</label>
+      <select id="language" class="input">
+        <option value="cpp">C++17</option>
+      </select>
+      <label class="label" for="source_code">代码</label>
+      <textarea id="source_code" class="code" spellcheck="false">#include <iostream>
+using namespace std;
+
+int main() {
+    long long a, b;
+    cin >> a >> b;
+    cout << a + b << "\n";
+    return 0;
+}
+</textarea>
+      <div class="actions">
+        <button id="submit-btn" class="button">提交评测</button>
+      </div>
+      <pre id="submit-message" class="notice"></pre>
+    </div>
+  </div>
+  <script src="/web/submit.js"></script>
+</body>
+</html>
