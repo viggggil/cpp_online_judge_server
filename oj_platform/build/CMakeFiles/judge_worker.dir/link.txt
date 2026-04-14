@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/judge_worker.dir/services/judge_worker/main.cpp.o CMakeFiles/judge_worker.dir/services/judge_worker/routes.cpp.o -o judge_worker  liboj_judge_core.a 

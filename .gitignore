@@ -1,0 +1,24 @@
+# ==== oj_platform build artifacts ====
+/oj_platform/build/
+/oj_platform/build-*/
+
+# ==== runtime / judge outputs ====
+/oj_platform/runtime/submissions/
+/runtime/
+
+# ==== common CMake / compiler byproducts ====
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+
+# ==== logs / temp ====
+*.log
+*.tmp
+*.swp
+*.swo
+.DS_Store
