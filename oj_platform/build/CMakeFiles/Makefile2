@@ -102,12 +102,12 @@ third_party/crow/clean: third_party/crow/CMakeFiles/uninstall.dir/clean
 CMakeFiles/oj_judge_core.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/max85/webserver/oj_platform/build/CMakeFiles --progress-num=4,5,6,7 "Built target oj_judge_core"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/max85/webserver/oj_platform/build/CMakeFiles --progress-num=4,5,6,7,8 "Built target oj_judge_core"
 .PHONY : CMakeFiles/oj_judge_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/oj_judge_core.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/max85/webserver/oj_platform/build/CMakeFiles 4
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/max85/webserver/oj_platform/build/CMakeFiles 5
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/oj_judge_core.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/max85/webserver/oj_platform/build/CMakeFiles 0
 .PHONY : CMakeFiles/oj_judge_core.dir/rule
@@ -128,12 +128,12 @@ CMakeFiles/oj_judge_core.dir/clean:
 CMakeFiles/oj_server.dir/all: CMakeFiles/oj_judge_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_server.dir/build.make CMakeFiles/oj_server.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_server.dir/build.make CMakeFiles/oj_server.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/max85/webserver/oj_platform/build/CMakeFiles --progress-num=8,9,10,11,12 "Built target oj_server"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/max85/webserver/oj_platform/build/CMakeFiles --progress-num=9,10,11,12,13,14 "Built target oj_server"
 .PHONY : CMakeFiles/oj_server.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/oj_server.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/max85/webserver/oj_platform/build/CMakeFiles 9
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/max85/webserver/oj_platform/build/CMakeFiles 11
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/oj_server.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/max85/webserver/oj_platform/build/CMakeFiles 0
 .PHONY : CMakeFiles/oj_server.dir/rule
@@ -159,7 +159,7 @@ CMakeFiles/judge_worker.dir/all: CMakeFiles/oj_judge_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/judge_worker.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/max85/webserver/oj_platform/build/CMakeFiles 7
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/max85/webserver/oj_platform/build/CMakeFiles 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/judge_worker.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/max85/webserver/oj_platform/build/CMakeFiles 0
 .PHONY : CMakeFiles/judge_worker.dir/rule

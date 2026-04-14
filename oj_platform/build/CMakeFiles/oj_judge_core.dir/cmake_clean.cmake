@@ -1,4 +1,6 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/oj_judge_core.dir/common/path_utils.cpp.o"
+  "CMakeFiles/oj_judge_core.dir/common/path_utils.cpp.o.d"
   "CMakeFiles/oj_judge_core.dir/services/judge_worker/compile_service.cpp.o"
   "CMakeFiles/oj_judge_core.dir/services/judge_worker/compile_service.cpp.o.d"
   "CMakeFiles/oj_judge_core.dir/services/judge_worker/judge_core.cpp.o"

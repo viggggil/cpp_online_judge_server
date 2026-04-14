@@ -1,5 +1,7 @@
 #include "services/oj_server/problem_repository.h"
 
+#include "common/path_utils.h"
+
 #include <crow/json.h>
 
 #include <algorithm>
@@ -15,16 +17,7 @@ namespace oj::server {
 namespace {
 
 std::filesystem::path resolve_problem_root(std::filesystem::path root) {
-    if (std::filesystem::exists(root)) {
-        return root;
-    }
-
-    const auto nested = std::filesystem::path{"oj_platform"} / root;
-    if (std::filesystem::exists(nested)) {
-        return nested;
-    }
-
-    return root;
+    return oj::common::resolve_project_path(root);
 }
 
 std::string read_text_file(const std::filesystem::path& path) {

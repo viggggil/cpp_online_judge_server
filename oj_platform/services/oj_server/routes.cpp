@@ -1,7 +1,9 @@
 #include "services/oj_server/routes.h"
 
+#include "common/path_utils.h"
 #include "services/oj_server/judge_service.h"
 #include "services/oj_server/problem_repository.h"
+#include "services/oj_server/redis_client.h"
 
 #include <crow.h>
 
@@ -14,17 +16,10 @@ namespace oj::server {
 
 namespace {
 
+constexpr auto kProblemListCacheKey = "oj:problems:list";
+
 std::filesystem::path resolve_web_path(const std::filesystem::path& relative_path) {
-    if (std::filesystem::exists(relative_path)) {
-        return relative_path;
-    }
-
-    const auto nested = std::filesystem::path{"oj_platform"} / relative_path;
-    if (std::filesystem::exists(nested)) {
-        return nested;
-    }
-
-    return relative_path;
+    return oj::common::resolve_project_path(relative_path);
 }
 
 std::string read_text_file(const std::filesystem::path& path) {
@@ -119,6 +114,21 @@ crow::json::wvalue make_submission_json(const oj::common::SubmissionResult& resu
     return body;
 }
 
+crow::json::wvalue make_problem_list_json(const std::vector<oj::common::ProblemSummary>& problems) {
+    crow::json::wvalue::list items;
+    for (const auto& problem : problems) {
+        crow::json::wvalue item;
+        item["id"] = problem.id;
+        item["title"] = problem.title;
+        item["difficulty"] = problem.difficulty;
+        items.push_back(std::move(item));
+    }
+
+    crow::json::wvalue body;
+    body["problems"] = std::move(items);
+    return body;
+}
+
 } // namespace
 
 void register_routes(crow::Crow<>& app) {
@@ -150,21 +160,31 @@ void register_routes(crow::Crow<>& app) {
     });
 
     CROW_ROUTE(app, "/api/problems")([] {
-        ProblemRepository repository;
-        const auto problems = repository.list();
+        const oj::common::RedisConfig redis_config{};
+        RedisClient redis_client{redis_config};
 
-        crow::json::wvalue::list items;
-        for (const auto& problem : problems) {
-            crow::json::wvalue item;
-            item["id"] = problem.id;
-            item["title"] = problem.title;
-            item["difficulty"] = problem.difficulty;
-            items.push_back(std::move(item));
+        if (const auto cached = redis_client.get(kProblemListCacheKey); cached) {
+            crow::response resp;
+            resp.code = 200;
+            resp.set_header("Content-Type", "application/json; charset=utf-8");
+            resp.set_header("X-Cache", "HIT");
+            resp.body = *cached;
+            return resp;
         }
 
-        crow::json::wvalue body;
-        body["problems"] = std::move(items);
-        return crow::response{body};
+        ProblemRepository repository;
+        const auto problems = repository.list();
+        const auto body = make_problem_list_json(problems);
+        const auto payload = body.dump();
+
+        redis_client.setex(kProblemListCacheKey, redis_config.problem_list_ttl_seconds, payload);
+
+        crow::response resp;
+        resp.code = 200;
+        resp.set_header("Content-Type", "application/json; charset=utf-8");
+        resp.set_header("X-Cache", "MISS");
+        resp.body = payload;
+        return resp;
     });
 
     CROW_ROUTE(app, "/api/problems/<int>")([](std::int64_t problem_id) {

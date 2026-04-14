@@ -5,6 +5,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/oj_server.dir/services/oj_server/main.cpp.o.d"
   "CMakeFiles/oj_server.dir/services/oj_server/problem_repository.cpp.o"
   "CMakeFiles/oj_server.dir/services/oj_server/problem_repository.cpp.o.d"
+  "CMakeFiles/oj_server.dir/services/oj_server/redis_client.cpp.o"
+  "CMakeFiles/oj_server.dir/services/oj_server/redis_client.cpp.o.d"
   "CMakeFiles/oj_server.dir/services/oj_server/routes.cpp.o"
   "CMakeFiles/oj_server.dir/services/oj_server/routes.cpp.o.d"
   "oj_server"

@@ -1,2 +1,2 @@
-/usr/bin/ar qc liboj_judge_core.a CMakeFiles/oj_judge_core.dir/services/judge_worker/judge_core.cpp.o CMakeFiles/oj_judge_core.dir/services/judge_worker/compile_service.cpp.o CMakeFiles/oj_judge_core.dir/services/judge_worker/run_service.cpp.o
+/usr/bin/ar qc liboj_judge_core.a CMakeFiles/oj_judge_core.dir/common/path_utils.cpp.o CMakeFiles/oj_judge_core.dir/services/judge_worker/judge_core.cpp.o CMakeFiles/oj_judge_core.dir/services/judge_worker/compile_service.cpp.o CMakeFiles/oj_judge_core.dir/services/judge_worker/run_service.cpp.o
 /usr/bin/ranlib liboj_judge_core.a

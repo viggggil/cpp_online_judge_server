@@ -233,6 +233,30 @@ uninstall/fast:
 	$(MAKE) $(MAKESILENT) -f third_party/crow/CMakeFiles/uninstall.dir/build.make third_party/crow/CMakeFiles/uninstall.dir/build
 .PHONY : uninstall/fast
 
+common/path_utils.o: common/path_utils.cpp.o
+.PHONY : common/path_utils.o
+
+# target to build an object file
+common/path_utils.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/common/path_utils.cpp.o
+.PHONY : common/path_utils.cpp.o
+
+common/path_utils.i: common/path_utils.cpp.i
+.PHONY : common/path_utils.i
+
+# target to preprocess a source file
+common/path_utils.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/common/path_utils.cpp.i
+.PHONY : common/path_utils.cpp.i
+
+common/path_utils.s: common/path_utils.cpp.s
+.PHONY : common/path_utils.s
+
+# target to generate assembly for a file
+common/path_utils.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_judge_core.dir/build.make CMakeFiles/oj_judge_core.dir/common/path_utils.cpp.s
+.PHONY : common/path_utils.cpp.s
+
 services/judge_worker/compile_service.o: services/judge_worker/compile_service.cpp.o
 .PHONY : services/judge_worker/compile_service.o
 
@@ -425,6 +449,30 @@ services/oj_server/problem_repository.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_server.dir/build.make CMakeFiles/oj_server.dir/services/oj_server/problem_repository.cpp.s
 .PHONY : services/oj_server/problem_repository.cpp.s
 
+services/oj_server/redis_client.o: services/oj_server/redis_client.cpp.o
+.PHONY : services/oj_server/redis_client.o
+
+# target to build an object file
+services/oj_server/redis_client.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_server.dir/build.make CMakeFiles/oj_server.dir/services/oj_server/redis_client.cpp.o
+.PHONY : services/oj_server/redis_client.cpp.o
+
+services/oj_server/redis_client.i: services/oj_server/redis_client.cpp.i
+.PHONY : services/oj_server/redis_client.i
+
+# target to preprocess a source file
+services/oj_server/redis_client.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_server.dir/build.make CMakeFiles/oj_server.dir/services/oj_server/redis_client.cpp.i
+.PHONY : services/oj_server/redis_client.cpp.i
+
+services/oj_server/redis_client.s: services/oj_server/redis_client.cpp.s
+.PHONY : services/oj_server/redis_client.s
+
+# target to generate assembly for a file
+services/oj_server/redis_client.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/oj_server.dir/build.make CMakeFiles/oj_server.dir/services/oj_server/redis_client.cpp.s
+.PHONY : services/oj_server/redis_client.cpp.s
+
 services/oj_server/routes.o: services/oj_server/routes.cpp.o
 .PHONY : services/oj_server/routes.o
 
@@ -467,6 +515,9 @@ help:
 	@echo "... judge_worker"
 	@echo "... oj_judge_core"
 	@echo "... oj_server"
+	@echo "... common/path_utils.o"
+	@echo "... common/path_utils.i"
+	@echo "... common/path_utils.s"
 	@echo "... services/judge_worker/compile_service.o"
 	@echo "... services/judge_worker/compile_service.i"
 	@echo "... services/judge_worker/compile_service.s"
@@ -491,6 +542,9 @@ help:
 	@echo "... services/oj_server/problem_repository.o"
 	@echo "... services/oj_server/problem_repository.i"
 	@echo "... services/oj_server/problem_repository.s"
+	@echo "... services/oj_server/redis_client.o"
+	@echo "... services/oj_server/redis_client.i"
+	@echo "... services/oj_server/redis_client.s"
 	@echo "... services/oj_server/routes.o"
 	@echo "... services/oj_server/routes.i"
 	@echo "... services/oj_server/routes.s"

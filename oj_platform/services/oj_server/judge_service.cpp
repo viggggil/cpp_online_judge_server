@@ -1,5 +1,6 @@
 #include "services/oj_server/judge_service.h"
 
+#include "common/path_utils.h"
 #include "services/judge_worker/judge_core.h"
 #include "services/oj_server/problem_repository.h"
 
@@ -17,17 +18,7 @@ namespace oj::server {
 namespace {
 
 std::filesystem::path resolve_runtime_path(std::filesystem::path path) {
-    if (path.is_absolute()) {
-        return path;
-    }
-
-    const auto direct_parent = path.parent_path();
-    if (direct_parent.empty() || std::filesystem::exists(direct_parent)) {
-        return path;
-    }
-
-    const auto nested = std::filesystem::path{"oj_platform"} / path;
-    return nested;
+    return oj::common::resolve_project_path(path);
 }
 
 std::int64_t parse_problem_id(const std::string& problem_id_text) {
