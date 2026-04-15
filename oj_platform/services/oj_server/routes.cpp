@@ -1,6 +1,7 @@
 #include "services/oj_server/routes.h"
 
 #include "common/path_utils.h"
+#include "services/oj_server/auth_service.h"
 #include "services/oj_server/judge_service.h"
 #include "services/oj_server/problem_repository.h"
 #include "services/oj_server/redis_client.h"
@@ -10,6 +11,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 
 namespace oj::server {
@@ -17,6 +19,33 @@ namespace oj::server {
 namespace {
 
 constexpr auto kProblemListCacheKey = "oj:problems:list";
+
+std::string extract_bearer_token(const crow::request& req) {
+    const auto auth_header = req.get_header_value("Authorization");
+    constexpr std::string_view prefix = "Bearer ";
+    if (auth_header.size() <= prefix.size() || auth_header.rfind(prefix.data(), 0) != 0) {
+        return {};
+    }
+    return auth_header.substr(prefix.size());
+}
+
+std::optional<AuthenticatedUser> require_user(const crow::request& req) {
+    AuthService auth_service;
+    return auth_service.verify_token(extract_bearer_token(req));
+}
+
+crow::response json_error(int code, const std::string& message) {
+    crow::json::wvalue body;
+    body["error"] = message;
+    return crow::response{code, body};
+}
+
+crow::json::wvalue make_auth_json(const std::string& token, const std::string& username) {
+    crow::json::wvalue body;
+    body["token"] = token;
+    body["username"] = username;
+    return body;
+}
 
 std::filesystem::path resolve_web_path(const std::filesystem::path& relative_path) {
     return oj::common::resolve_project_path(relative_path);
@@ -187,19 +216,74 @@ void register_routes(crow::Crow<>& app) {
         return resp;
     });
 
-    CROW_ROUTE(app, "/api/problems/<int>")([](std::int64_t problem_id) {
+    CROW_ROUTE(app, "/api/auth/register").methods(crow::HTTPMethod::POST)([](const crow::request& req) {
+        const auto json = crow::json::load(req.body);
+        if (!json || !json.has("username") || !json.has("password")) {
+            return json_error(400, "username and password are required");
+        }
+
+        try {
+            const std::string username = json["username"].s();
+            const std::string password = json["password"].s();
+            AuthService auth_service;
+            const auto token = auth_service.register_user(username, password);
+            return crow::response{200, make_auth_json(token, username)};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+
+    CROW_ROUTE(app, "/api/auth/login").methods(crow::HTTPMethod::POST)([](const crow::request& req) {
+        const auto json = crow::json::load(req.body);
+        if (!json || !json.has("username") || !json.has("password")) {
+            return json_error(400, "username and password are required");
+        }
+
+        try {
+            const std::string username = json["username"].s();
+            const std::string password = json["password"].s();
+            AuthService auth_service;
+            const auto token = auth_service.login_user(username, password);
+            return crow::response{200, make_auth_json(token, username)};
+        } catch (const std::exception& ex) {
+            return json_error(401, ex.what());
+        }
+    });
+
+    CROW_ROUTE(app, "/api/auth/me")([](const crow::request& req) {
+        const auto user = require_user(req);
+        if (!user) {
+            return json_error(401, "please login first");
+        }
+
+        crow::json::wvalue body;
+        body["username"] = user->username;
+        return crow::response{200, body};
+    });
+
+    CROW_ROUTE(app, "/api/problems/<int>").methods(crow::HTTPMethod::GET)([](const crow::request& req, std::int64_t problem_id) {
+        const auto user = require_user(req);
+        if (!user) {
+            return json_error(401, "please login first");
+        }
+
         ProblemRepository repository;
         const auto detail = repository.find_detail(problem_id);
         if (!detail) {
-            return crow::response{404, "problem not found"};
+            return json_error(404, "problem not found");
         }
         return crow::response{make_problem_detail_json(*detail)};
     });
 
     CROW_ROUTE(app, "/api/submissions").methods(crow::HTTPMethod::POST)([](const crow::request& req) {
+        const auto user = require_user(req);
+        if (!user) {
+            return json_error(401, "please login first");
+        }
+
         const auto json = crow::json::load(req.body);
         if (!json) {
-            return crow::response{400, "invalid json payload"};
+            return json_error(400, "invalid json payload");
         }
 
         oj::common::SubmissionRequest request{
@@ -212,11 +296,16 @@ void register_routes(crow::Crow<>& app) {
         return crow::response{200, make_submission_json(result)};
     });
 
-    CROW_ROUTE(app, "/api/submissions/<string>")([](const std::string& submission_id) {
+    CROW_ROUTE(app, "/api/submissions/<string>")([](const crow::request& req, const std::string& submission_id) {
+        const auto user = require_user(req);
+        if (!user) {
+            return json_error(401, "please login first");
+        }
+
         JudgeService judge_service;
         const auto result = judge_service.find_submission(submission_id);
         if (!result) {
-            return crow::response{404, "submission not found"};
+            return json_error(404, "submission not found");
         }
         return crow::response{200, make_submission_json(*result)};
     });

@@ -10,8 +10,11 @@ function renderStatus(status) {
 }
 
 async function loadSubmission() {
+  if (!window.ojAuth.protectPage()) {
+    return;
+  }
   const id = submissionIdFromPath();
-  const response = await fetch(`/api/submissions/${id}`);
+  const response = await window.ojAuth.authFetch(`/api/submissions/${id}`);
   if (!response.ok) throw new Error('提交不存在');
   const data = await response.json();
 

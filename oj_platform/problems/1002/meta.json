@@ -1,0 +1,7 @@
+{
+  "id": 1002,
+  "title": "最长不重复子串长度",
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 128,
+  "tags": ["string", "sliding-window", "medium"]
+}

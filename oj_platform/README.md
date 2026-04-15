@@ -1,36 +1,128 @@
 # oj_platform
 
-基于 Crow 的在线判题平台骨架工程。
+一个基于 **Crow** 实现的轻量级在线判题平台原型工程，目标是逐步演进成“题库 + 提交 + 判题 + 负载均衡 worker + Web 前端”的完整 OJ 系统。
+
+当前仓库已经不是只有目录骨架，而是具备了一个可以运行和演示的最小版本：
+
+- 使用 `Crow` 作为第三方 Web 框架
+- 拥有 `oj_server` 与 `judge_worker` 两个服务目标
+- 支持题目列表、题目详情、代码提交、提交结果查看
+- 支持本地题库存储与测试点读取
+- 支持用户注册 / 登录
+- 密码采用 `bcrypt` 哈希保存
+- 登录态采用 JWT
+- 前端页面支持登录弹窗、提交与结果展示
+
+> 说明：当前判题链路仍以“单机原型”方式组织，`oj_server` 中直接调用判题核心，后续可以继续拆分成真正的远程调度和多 worker 负载均衡架构。
+
+---
+
+## 当前项目状态
+
+### 已完成
+
+- [x] 基础目录结构搭建
+- [x] Crow 作为第三方库接入
+- [x] `oj_server` 路由与静态资源服务
+- [x] 题目列表 / 题面详情 API
+- [x] 提交代码 / 查询提交结果 API
+- [x] 本地测试点驱动的判题流程
+- [x] 登录注册能力
+- [x] JWT 鉴权
+- [x] Web 端登录弹窗与登录态控制
+- [x] Redis 题目列表缓存接入代码
+
+### 当前仍属于原型 / 待增强
+
+- [ ] 远程 `judge_worker` 调度与真正负载均衡
+- [ ] 多语言支持（当前主要按 C++17 路径组织）
+- [ ] 沙箱隔离进一步增强
+- [ ] 数据库存储用户/提交/题目元数据
+- [ ] 管理后台、题目录入后台、评测队列
+- [ ] 更完整的单元测试与集成测试
+
+---
 
 ## 目录结构
 
 ```text
 oj_platform/
-├─ third_party/
-│  └─ crow/                 # 当前为软链接，指向 ../../Crow
-├─ common/                  # 跨服务共享类型与配置
+├─ third_party/             # 第三方依赖
+│  └─ crow/                 # Crow 源码（当前为软链接）
+├─ cmake/                   # 自定义 CMake 模块
+├─ common/                  # 共享协议、路径工具、公共类型
 ├─ services/
-│  ├─ oj_server/            # 对外 API 服务：题目、提交、查询
-│  └─ judge_worker/         # 判题工作节点：编译、运行、判题
-├─ problems/                # 题目数据
-├─ web/                     # 前端资源
-├─ runtime/                 # 运行时目录（编译产物/日志/沙箱）
-└─ tests/                   # 测试代码
+│  ├─ oj_server/            # 对外服务：题目、提交、鉴权、静态页面
+│  └─ judge_worker/         # 判题节点：编译、运行、测试点执行
+├─ problems/                # 题库数据（每题一个目录）
+├─ web/                     # 前端静态页面与 JS/CSS
+├─ runtime/                 # 运行时数据：提交记录、用户文件等
+├─ tests/                   # 测试代码目录（预留）
+└─ README.md
 ```
 
-## 当前已实现的骨架
+各子目录下还补充了独立 `README.md`，方便单独阅读职责说明。
 
-- `oj_server`
-  - `GET /`
-  - `GET /api/health`
-  - `GET /api/problems`
-  - `POST /api/submissions`
-- `judge_worker`
-  - `GET /`
-  - `GET /api/health`
-  - `POST /api/judge`
+---
+
+## 已实现的 HTTP 接口
+
+### `oj_server`
+
+#### 页面路由
+
+- `GET /`：题目列表页
+- `GET /problems/<id>`：题目详情页
+- `GET /submit/<id>`：提交页
+- `GET /submissions/<id>`：提交结果页
+- `GET /web/<path>`：静态资源
+
+#### 公共 API
+
+- `GET /api/health`
+- `GET /api/problems`
+
+#### 鉴权 API
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+
+#### 需要登录的 API
+
+- `GET /api/problems/<id>`
+- `POST /api/submissions`
+- `GET /api/submissions/<submission_id>`
+
+### `judge_worker`
+
+目前已具备独立服务目标和基础路由骨架，便于后续改造成真实的远程判题节点。
+
+---
+
+## 当前前端行为
+
+- 首页可匿名查看题目列表
+- 点击“查看题面 / 提交代码”时，如果未登录，会弹出登录 / 注册框
+- 登录成功后可访问题面、提交代码并查看结果
+- 页面右上角显示当前登录用户并支持退出登录
+
+---
 
 ## 构建
+
+### 依赖
+
+当前构建脚本依赖：
+
+- C++17 编译器
+- CMake 3.15+
+- OpenSSL
+- `crypt`（用于 bcrypt）
+- hiredis
+- redis++
+
+### 构建命令
 
 ```bash
 cd /home/max85/webserver
@@ -38,21 +130,114 @@ cmake -S oj_platform -B oj_platform/build
 cmake --build oj_platform/build -j
 ```
 
-## 运行
+如果你只是复用当前已验证的构建目录，也可以使用：
 
 ```bash
-/home/max85/webserver/oj_platform/build/oj_server
-/home/max85/webserver/oj_platform/build/judge_worker
+cmake -S /home/max85/webserver/oj_platform -B /home/max85/webserver/oj_platform/build-auth-test
+cmake --build /home/max85/webserver/oj_platform/build-auth-test -j
 ```
 
-默认端口：
+---
+
+## 运行
+
+### 启动 `oj_server`
+
+```bash
+/home/max85/webserver/oj_platform/build-auth-test/oj_server
+```
+
+默认监听：
 
 - `oj_server`: `18080`
+
+访问：
+
+```text
+http://127.0.0.1:18080
+```
+
+### 启动 `judge_worker`
+
+```bash
+/home/max85/webserver/oj_platform/build-auth-test/judge_worker
+```
+
+默认监听：
+
 - `judge_worker`: `18081`
 
-## 后续建议扩展
+---
 
-1. 增加题目持久化与配置文件加载。
-2. 让 `oj_server` 通过 HTTP/RPC 调度 `judge_worker`。
-3. 补充沙箱执行、编译缓存、测试点比对与结果回传。
-4. 为 `web/` 增加题目列表、提交页和状态轮询页面。
+## 题库格式说明
+
+每道题使用一个独立目录，例如：
+
+```text
+problems/1000/
+├─ meta.json
+├─ statement_zh.md
+├─ checker.cpp
+└─ tests/
+   ├─ 1.in
+   ├─ 1.out
+   ├─ 2.in
+   └─ 2.out
+```
+
+### `meta.json`
+
+示例：
+
+```json
+{
+  "id": 1000,
+  "title": "A + B Problem",
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 128,
+  "tags": ["implementation", "math"]
+}
+```
+
+### 约定
+
+- `statement_zh.md`：题面
+- `tests/N.in`：输入
+- `tests/N.out`：标准输出
+- `checker.cpp`：特殊判题器预留（当前默认未真正编译使用）
+
+---
+
+## 目前内置题目
+
+当前题库包含：
+
+- `1000` A + B Problem
+- `1001` 两数之和（数组版）
+- `1002` 最长不重复子串长度
+- `1003` 合并两个有序数组
+- `1004` 二叉树层序遍历（数组输入版）
+
+> 这些题目是参考常见面试 / Hot100 类型自行整理的训练题，不直接复制第三方平台原题文本。
+
+---
+
+## 下一步建议
+
+1. 把 `oj_server -> judge_worker` 的本地调用改为 HTTP / RPC 派发
+2. 增加判题队列与异步状态轮询
+3. 补充用户、题目、提交的数据持久化
+4. 接入管理员后台与题目录入工具
+5. 增加更多题目与更完整的特殊判题支持
+
+---
+
+## 说明
+
+如果你后面希望继续往“负载均衡在线判题系统”方向推进，我建议下一阶段优先做：
+
+1. worker 注册与心跳
+2. 任务队列
+3. 调度策略（轮询 / 最少连接 / 按负载）
+4. 提交异步化
+5. 判题沙箱隔离强化

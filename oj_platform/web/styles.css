@@ -55,3 +55,77 @@ body {
 .back-link { color: #2563eb; text-decoration: none; }
 .status-ok { color: #059669; font-weight: 700; }
 .status-bad { color: #dc2626; font-weight: 700; }
+
+.auth-floating {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 20;
+}
+
+.auth-userinfo {
+  background: rgba(255,255,255,.95);
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 8px 12px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.08);
+}
+
+.auth-btn {
+  padding: 8px 14px;
+}
+
+.auth-btn-secondary {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.auth-btn-secondary:hover {
+  background: #d1d5db;
+}
+
+.auth-modal.hidden {
+  display: none;
+}
+
+.auth-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.auth-modal-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 24, 39, .45);
+}
+
+.auth-dialog {
+  position: relative;
+  width: min(92vw, 420px);
+  margin: 10vh auto 0;
+  z-index: 1;
+}
+
+.auth-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.auth-close-btn {
+  border: none;
+  background: transparent;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.auth-actions-row {
+  display: flex;
+  gap: 8px;
+}

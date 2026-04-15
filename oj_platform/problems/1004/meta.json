@@ -1,0 +1,7 @@
+{
+  "id": 1004,
+  "title": "二叉树层序遍历（数组输入版）",
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 128,
+  "tags": ["tree", "bfs", "medium"]
+}

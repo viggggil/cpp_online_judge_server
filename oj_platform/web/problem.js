@@ -4,8 +4,11 @@ function problemIdFromPath() {
 }
 
 async function loadProblem() {
+  if (!window.ojAuth.protectPage()) {
+    return;
+  }
   const id = problemIdFromPath();
-  const response = await fetch(`/api/problems/${id}`);
+  const response = await window.ojAuth.authFetch(`/api/problems/${id}`);
   if (!response.ok) throw new Error('题目不存在');
   const problem = await response.json();
 
