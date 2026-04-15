@@ -45,3 +45,12 @@ add_executable(judge_worker
 
 target_include_directories(judge_worker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(judge_worker PRIVATE Crow::Crow oj_judge_core)
+
+add_executable(judge_dispatcher
+    services/judge_dispatcher/main.cpp
+    services/oj_server/problem_repository.cpp
+    services/oj_server/redis_client.cpp
+)
+
+target_include_directories(judge_dispatcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(judge_dispatcher PRIVATE Crow::Crow oj_judge_core redis++::redis++ hiredis::hiredis)

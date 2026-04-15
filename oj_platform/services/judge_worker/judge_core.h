@@ -14,7 +14,9 @@ public:
 private:
     std::filesystem::path prepare_work_directory(std::int64_t submission_id) const;
     oj::protocol::TestCaseResult run_single_testcase(const std::string& executable_path,
-                                                     const oj::protocol::TestCase& test_case) const;
+                                                     const oj::protocol::TestCase& test_case,
+                                                     std::int32_t time_limit_ms,
+                                                     std::int32_t memory_limit_mb) const;
     void summarize_results(oj::protocol::JudgeResponse& response) const;
     static std::string normalize_output(std::string text);
 };

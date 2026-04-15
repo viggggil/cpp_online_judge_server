@@ -82,7 +82,10 @@ oj::protocol::JudgeResponse JudgeCore::judge(const oj::protocol::JudgeRequest& r
 
         for (const auto& test_case : effective_test_cases) {
             response.test_case_results.push_back(
-                run_single_testcase(compile_result.executable_path.string(), test_case));
+                run_single_testcase(compile_result.executable_path.string(),
+                                    test_case,
+                                    request.time_limit_ms,
+                                    request.memory_limit_mb));
         }
 
         summarize_results(response);
@@ -105,14 +108,16 @@ std::filesystem::path JudgeCore::prepare_work_directory(std::int64_t submission_
 }
 
 oj::protocol::TestCaseResult JudgeCore::run_single_testcase(const std::string& executable_path,
-                                                            const oj::protocol::TestCase& test_case) const {
+                                                            const oj::protocol::TestCase& test_case,
+                                                            std::int32_t time_limit_ms,
+                                                            std::int32_t memory_limit_mb) const {
     RunService run_service;
     const auto run_work_directory = std::filesystem::path{"runtime"} / "judge_worker" / "runs";
     std::filesystem::create_directories(run_work_directory);
     const auto run_result = run_service.run(executable_path,
                                             test_case.input,
-                                            1000,
-                                            128,
+                                            time_limit_ms,
+                                            memory_limit_mb,
                                             run_work_directory);
 
     oj::protocol::TestCaseResult result;

@@ -1,8 +1,8 @@
 #include "services/oj_server/judge_service.h"
 
 #include "common/path_utils.h"
-#include "services/judge_worker/judge_core.h"
 #include "services/oj_server/problem_repository.h"
+#include "services/oj_server/redis_client.h"
 
 #include <crow/json.h>
 
@@ -36,6 +36,18 @@ std::string judge_status_to_submission_status(oj::protocol::JudgeStatus status) 
     return std::string{oj::protocol::to_string(status)};
 }
 
+bool is_terminal_submission_status(const std::string& status) {
+    return status == "OK" ||
+           status == "COMPILE_ERROR" ||
+           status == "RUNTIME_ERROR" ||
+           status == "TIME_LIMIT_EXCEEDED" ||
+           status == "MEMORY_LIMIT_EXCEEDED" ||
+           status == "WRONG_ANSWER" ||
+           status == "PRESENTATION_ERROR" ||
+           status == "SYSTEM_ERROR" ||
+           status == "NOT_FOUND";
+}
+
 std::string build_submission_detail(const oj::protocol::JudgeResponse& response) {
     std::ostringstream output;
     output << "submission judged with status " << oj::protocol::to_string(response.final_status);
@@ -46,6 +58,16 @@ std::string build_submission_detail(const oj::protocol::JudgeResponse& response)
         output << "; compile_stderr=" << response.compile_stderr;
     }
     return output.str();
+}
+
+std::string build_submission_detail(const std::string& status) {
+    if (status == "QUEUED") {
+        return "submission has been accepted and queued";
+    }
+    if (status == "RUNNING") {
+        return "submission is being judged";
+    }
+    return "submission status updated to " + status;
 }
 
 void persist_text_file(const std::filesystem::path& path, const std::string& content) {
@@ -59,6 +81,7 @@ crow::json::wvalue build_submission_record_json(const oj::common::SubmissionResu
     body["submission_id"] = result.submission_id;
     body["problem_id"] = result.problem_id;
     body["language"] = result.language;
+    body["source_code"] = result.source_code;
     body["status"] = result.status;
     body["accepted"] = result.accepted;
     body["detail"] = result.detail;
@@ -120,6 +143,7 @@ oj::common::SubmissionResult parse_submission_record(const crow::json::rvalue& j
     result.submission_id = json.has("submission_id") ? std::string{json["submission_id"].s()} : std::string{};
     result.problem_id = json.has("problem_id") ? std::string{json["problem_id"].s()} : std::string{};
     result.language = json.has("language") ? std::string{json["language"].s()} : std::string{};
+    result.source_code = json.has("source_code") ? std::string{json["source_code"].s()} : std::string{};
     result.status = json.has("status") ? std::string{json["status"].s()} : std::string{};
     result.accepted = json.has("accepted") ? json["accepted"].b() : false;
     result.detail = json.has("detail") ? std::string{json["detail"].s()} : std::string{};
@@ -169,6 +193,7 @@ oj::common::SubmissionResult JudgeService::submit(const oj::common::SubmissionRe
     result.submission_id = submission_id;
     result.problem_id = request.problem_id;
     result.language = request.language;
+    result.source_code = request.source_code;
 
     try {
         ProblemRepository repository{problems_root_};
@@ -182,20 +207,24 @@ oj::common::SubmissionResult JudgeService::submit(const oj::common::SubmissionRe
             return result;
         }
 
-        oj::protocol::JudgeRequest judge_request;
-        judge_request.submission_id = tick;
-        judge_request.problem_id = problem_id;
-        judge_request.language = parse_language(request.language);
-        judge_request.source_code = request.source_code;
-        judge_request.time_limit_ms = detail->time_limit_ms;
-        judge_request.memory_limit_mb = detail->memory_limit_mb;
-        judge_request.test_cases = repository.load_test_cases(problem_id);
+        result.status = "QUEUED";
+        result.accepted = false;
+        result.detail = build_submission_detail(result.status);
 
-        oj::worker::JudgeCore judge_core;
-        result.judge_response = judge_core.judge(judge_request);
-        result.status = judge_status_to_submission_status(result.judge_response.final_status);
-        result.accepted = (result.judge_response.final_status == oj::protocol::JudgeStatus::ok);
-        result.detail = build_submission_detail(result.judge_response);
+        crow::json::wvalue task_json;
+        task_json["submission_id"] = result.submission_id;
+        task_json["problem_id"] = request.problem_id;
+        task_json["language"] = request.language;
+        task_json["source_code"] = request.source_code;
+
+        const oj::common::RedisConfig redis_config{};
+        RedisClient redis_client{redis_config};
+        if (!redis_client.available()) {
+            throw std::runtime_error("redis is unavailable, cannot enqueue submission");
+        }
+        if (!redis_client.rpush(redis_config.submission_queue_key, task_json.dump())) {
+            throw std::runtime_error("failed to push submission into redis queue");
+        }
     } catch (const std::exception& ex) {
         result.status = "SYSTEM_ERROR";
         result.detail = ex.what();
@@ -219,7 +248,14 @@ std::optional<oj::common::SubmissionResult> JudgeService::find_submission(const 
     if (!json) {
         return std::nullopt;
     }
-    return parse_submission_record(*json);
+    auto result = parse_submission_record(*json);
+    if (result.detail.empty()) {
+        result.detail = build_submission_detail(result.status);
+    }
+    if (!is_terminal_submission_status(result.status)) {
+        result.accepted = false;
+    }
+    return result;
 }
 
 } // namespace oj::server

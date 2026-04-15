@@ -293,7 +293,7 @@ void register_routes(crow::Crow<>& app) {
 
         JudgeService judge_service;
         const auto result = judge_service.submit(request);
-        return crow::response{200, make_submission_json(result)};
+        return crow::response{202, make_submission_json(result)};
     });
 
     CROW_ROUTE(app, "/api/submissions/<string>")([](const crow::request& req, const std::string& submission_id) {

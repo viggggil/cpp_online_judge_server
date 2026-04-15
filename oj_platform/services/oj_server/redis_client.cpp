@@ -81,4 +81,33 @@ bool RedisClient::setex(const std::string& key, long long ttl_seconds, const std
     }
 }
 
+bool RedisClient::rpush(const std::string& key, const std::string& value) const {
+    if (!available()) {
+        return false;
+    }
+
+    try {
+        impl_->redis->rpush(key, value);
+        return true;
+    } catch (const sw::redis::Error&) {
+        return false;
+    }
+}
+
+std::optional<std::string> RedisClient::blpop(const std::string& key, long long timeout_seconds) const {
+    if (!available()) {
+        return std::nullopt;
+    }
+
+    try {
+        const auto item = impl_->redis->blpop(key, std::chrono::seconds(timeout_seconds));
+        if (!item) {
+            return std::nullopt;
+        }
+        return item->second;
+    } catch (const sw::redis::Error&) {
+        return std::nullopt;
+    }
+}
+
 } // namespace oj::server

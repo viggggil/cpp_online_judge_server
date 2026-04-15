@@ -56,6 +56,11 @@ body {
 .status-ok { color: #059669; font-weight: 700; }
 .status-bad { color: #dc2626; font-weight: 700; }
 
+#polling-hint {
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
 .auth-floating {
   position: fixed;
   top: 16px;

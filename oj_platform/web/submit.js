@@ -36,7 +36,7 @@ async function submitCode() {
   if (!response.ok) {
     throw new Error(result.error || '提交失败');
   }
-  message.textContent = `提交成功，状态: ${result.status}`;
+  message.textContent = `提交成功，当前状态: ${result.status}`;
   if (result.submission_id) {
     window.location.href = `/submissions/${result.submission_id}`;
   }

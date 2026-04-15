@@ -26,7 +26,15 @@ struct SubmissionResult {
     bool accepted{false};
     std::string problem_id;
     std::string language;
+    std::string source_code;
     oj::protocol::JudgeResponse judge_response;
+};
+
+struct SubmissionQueueTask {
+    std::string submission_id;
+    std::string problem_id;
+    std::string language;
+    std::string source_code;
 };
 
 } // namespace oj::common

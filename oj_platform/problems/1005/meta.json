@@ -1,0 +1,7 @@
+{
+  "id": 1005,
+  "title": "失落文明（困难版）",
+  "time_limit_ms": 2000,
+  "memory_limit_mb": 256,
+  "tags": ["hard", "dp", "data-structures", "greedy"]
+}

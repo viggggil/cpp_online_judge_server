@@ -24,6 +24,8 @@ public:
     bool available() const noexcept;
     std::optional<std::string> get(const std::string& key) const;
     bool setex(const std::string& key, long long ttl_seconds, const std::string& value) const;
+    bool rpush(const std::string& key, const std::string& value) const;
+    std::optional<std::string> blpop(const std::string& key, long long timeout_seconds) const;
 
 private:
     struct Impl;

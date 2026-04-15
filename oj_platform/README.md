@@ -12,8 +12,9 @@
 - 密码采用 `bcrypt` 哈希保存
 - 登录态采用 JWT
 - 前端页面支持登录弹窗、提交与结果展示
+- 支持 Redis 提交队列、异步评测状态流转与轮询展示
 
-> 说明：当前判题链路仍以“单机原型”方式组织，`oj_server` 中直接调用判题核心，后续可以继续拆分成真正的远程调度和多 worker 负载均衡架构。
+> 说明：当前版本已把“提交入口”和“判题消费”拆成异步队列模型：`oj_server` 负责入队，`judge_dispatcher` 负责消费并调用本地判题核心；后续可以继续把 dispatcher 演进成真正的远程调度和多 worker 负载均衡架构。
 
 ---
 
@@ -31,14 +32,17 @@
 - [x] JWT 鉴权
 - [x] Web 端登录弹窗与登录态控制
 - [x] Redis 题目列表缓存接入代码
+- [x] Redis 提交队列与异步评测状态轮询
+- [x] 独立 `judge_dispatcher` 消费进程
+- [x] 慢题示例 `1005` 与 20 组测试数据
 
 ### 当前仍属于原型 / 待增强
 
-- [ ] 远程 `judge_worker` 调度与真正负载均衡
+- [ ] 远程 `judge_worker` HTTP 调度与真正负载均衡
 - [ ] 多语言支持（当前主要按 C++17 路径组织）
 - [ ] 沙箱隔离进一步增强
 - [ ] 数据库存储用户/提交/题目元数据
-- [ ] 管理后台、题目录入后台、评测队列
+- [ ] 管理后台、题目录入后台、队列监控面板
 - [ ] 更完整的单元测试与集成测试
 
 ---
@@ -53,7 +57,8 @@ oj_platform/
 ├─ common/                  # 共享协议、路径工具、公共类型
 ├─ services/
 │  ├─ oj_server/            # 对外服务：题目、提交、鉴权、静态页面
-│  └─ judge_worker/         # 判题节点：编译、运行、测试点执行
+│  ├─ judge_worker/         # 判题节点：编译、运行、测试点执行
+│  └─ judge_dispatcher/     # 队列消费者：从 Redis 取任务并驱动判题
 ├─ problems/                # 题库数据（每题一个目录）
 ├─ web/                     # 前端静态页面与 JS/CSS
 ├─ runtime/                 # 运行时数据：提交记录、用户文件等
@@ -91,12 +96,19 @@ oj_platform/
 #### 需要登录的 API
 
 - `GET /api/problems/<id>`
-- `POST /api/submissions`
+- `POST /api/submissions`（异步入队，返回 `202 Accepted`）
 - `GET /api/submissions/<submission_id>`
 
 ### `judge_worker`
 
 目前已具备独立服务目标和基础路由骨架，便于后续改造成真实的远程判题节点。
+
+### `judge_dispatcher`
+
+- 从 Redis List（默认 key：`oj:queue:submissions`）阻塞消费提交任务
+- 将提交状态从 `QUEUED` 更新为 `RUNNING`
+- 调用判题核心完成编译与测试点执行
+- 将状态更新为最终态，如 `OK / WRONG_ANSWER / TLE / SYSTEM_ERROR`
 
 ---
 
@@ -105,6 +117,7 @@ oj_platform/
 - 首页可匿名查看题目列表
 - 点击“查看题面 / 提交代码”时，如果未登录，会弹出登录 / 注册框
 - 登录成功后可访问题面、提交代码并查看结果
+- 提交后结果页会自动轮询，展示 `QUEUED -> RUNNING -> FINAL_STATUS` 的变化
 - 页面右上角显示当前登录用户并支持退出登录
 
 ---
@@ -121,6 +134,7 @@ oj_platform/
 - `crypt`（用于 bcrypt）
 - hiredis
 - redis++
+- Redis Server（运行异步评测链路时需要）
 
 ### 构建命令
 
@@ -166,6 +180,24 @@ http://127.0.0.1:18080
 默认监听：
 
 - `judge_worker`: `18081`
+
+### 启动 `judge_dispatcher`
+
+```bash
+/home/max85/webserver/oj_platform/build-auth-test/judge_dispatcher
+```
+
+该进程本身不提供 HTTP 接口，负责后台消费 Redis 队列。
+
+### 推荐启动顺序
+
+```bash
+redis-server --port 6379
+/home/max85/webserver/oj_platform/build-auth-test/judge_dispatcher
+/home/max85/webserver/oj_platform/build-auth-test/oj_server
+```
+
+如果你要继续调试 `judge_worker` 的 HTTP 接口，也可以单独启动它。
 
 ---
 
@@ -217,6 +249,7 @@ problems/1000/
 - `1002` 最长不重复子串长度
 - `1003` 合并两个有序数组
 - `1004` 二叉树层序遍历（数组输入版）
+- `1005` 失落文明（困难版，异步慢题演示）
 
 > 这些题目是参考常见面试 / Hot100 类型自行整理的训练题，不直接复制第三方平台原题文本。
 
@@ -224,8 +257,8 @@ problems/1000/
 
 ## 下一步建议
 
-1. 把 `oj_server -> judge_worker` 的本地调用改为 HTTP / RPC 派发
-2. 增加判题队列与异步状态轮询
+1. 把 `judge_dispatcher -> judge_worker` 的本地调用改为 HTTP / RPC 派发
+2. 增加多个 worker 的注册、心跳与调度策略
 3. 补充用户、题目、提交的数据持久化
 4. 接入管理员后台与题目录入工具
 5. 增加更多题目与更完整的特殊判题支持
