@@ -26,15 +26,18 @@ std::filesystem::path resolve_project_path(const std::filesystem::path& relative
         return relative_path;
     }
 
+    const auto cwd = std::filesystem::current_path();
+    const auto exe_dir = executable_dir();
+
     const std::vector<std::filesystem::path> candidates = {
         relative_path,
-        std::filesystem::current_path() / relative_path,
-        std::filesystem::current_path() / "oj_platform" / relative_path,
-        executable_dir() / relative_path,
-        executable_dir().parent_path() / relative_path,
-        executable_dir().parent_path().parent_path() / relative_path,
-        executable_dir().parent_path() / "oj_platform" / relative_path,
-        executable_dir().parent_path().parent_path() / "oj_platform" / relative_path,
+        cwd / "oj_platform" / relative_path,
+        exe_dir.parent_path() / relative_path,
+        exe_dir.parent_path() / "oj_platform" / relative_path,
+        exe_dir.parent_path().parent_path() / relative_path,
+        exe_dir.parent_path().parent_path() / "oj_platform" / relative_path,
+        cwd / relative_path,
+        exe_dir / relative_path,
     };
 
     for (const auto& candidate : candidates) {

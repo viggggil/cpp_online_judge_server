@@ -196,7 +196,7 @@ oj::common::SubmissionResult JudgeService::submit(const oj::common::SubmissionRe
     result.source_code = request.source_code;
 
     try {
-        ProblemRepository repository{problems_root_};
+        ProblemRepository repository;
         const auto problem_id = parse_problem_id(request.problem_id);
         const auto detail = repository.find_detail(problem_id);
         if (!detail) {
@@ -210,6 +210,10 @@ oj::common::SubmissionResult JudgeService::submit(const oj::common::SubmissionRe
         result.status = "QUEUED";
         result.accepted = false;
         result.detail = build_submission_detail(result.status);
+
+        persist_text_file(submissions_root_ / submission_id / "source.cpp", request.source_code);
+        persist_text_file(submissions_root_ / submission_id / "result.json",
+                          build_submission_record_json(result).dump());
 
         crow::json::wvalue task_json;
         task_json["submission_id"] = result.submission_id;

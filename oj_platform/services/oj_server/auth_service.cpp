@@ -1,9 +1,10 @@
 #include "services/oj_server/auth_service.h"
 
-#include "common/path_utils.h"
-
 #include <crow.h>
 #include <crow/utility.h>
+
+#include <cppconn/prepared_statement.h>
+#include <cppconn/resultset.h>
 
 #include <crypt.h>
 #include <openssl/hmac.h>
@@ -12,14 +13,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
-#include <mutex>
 #include <optional>
-#include <sstream>
 #include <stdexcept>
 #include <string>
-#include <vector>
 
 namespace oj::server {
 
@@ -30,15 +26,6 @@ struct UserRecord {
     std::string password_hash;
     std::int64_t created_at{0};
 };
-
-std::mutex& users_mutex() {
-    static std::mutex mutex;
-    return mutex;
-}
-
-std::filesystem::path resolve_users_path(const std::filesystem::path& relative_path) {
-    return oj::common::resolve_project_path(relative_path);
-}
 
 std::int64_t unix_now() {
     return std::chrono::duration_cast<std::chrono::seconds>(
@@ -119,69 +106,21 @@ void validate_password(const std::string& password) {
     }
 }
 
-std::vector<UserRecord> load_users_from_file(const std::filesystem::path& path) {
-    if (!std::filesystem::exists(path)) {
-        return {};
-    }
-
-    std::ifstream input(path, std::ios::in | std::ios::binary);
-    if (!input) {
-        throw std::runtime_error("failed to open users file");
-    }
-
-    std::ostringstream buffer;
-    buffer << input.rdbuf();
-    if (buffer.str().empty()) {
-        return {};
-    }
-
-    auto json = crow::json::load(buffer.str());
-    if (!json) {
-        throw std::runtime_error("invalid users json file");
-    }
-
-    std::vector<UserRecord> users;
-    if (!json.has("users") || json["users"].t() != crow::json::type::List) {
-        return users;
-    }
-
-    for (const auto& item : json["users"]) {
-        UserRecord record;
-        record.username = item.has("username") ? std::string{item["username"].s()} : std::string{};
-        record.password_hash = item.has("password_hash") ? std::string{item["password_hash"].s()} : std::string{};
-        record.created_at = item.has("created_at") ? item["created_at"].i() : 0;
-        if (!record.username.empty() && !record.password_hash.empty()) {
-            users.push_back(std::move(record));
-        }
-    }
-    return users;
-}
-
-void save_users_to_file(const std::filesystem::path& path, const std::vector<UserRecord>& users) {
-    crow::json::wvalue root;
-    crow::json::wvalue::list items;
-    for (const auto& user : users) {
-        crow::json::wvalue item;
-        item["username"] = user.username;
-        item["password_hash"] = user.password_hash;
-        item["created_at"] = user.created_at;
-        items.push_back(std::move(item));
-    }
-    root["users"] = std::move(items);
-
-    std::filesystem::create_directories(path.parent_path());
-    std::ofstream output(path, std::ios::out | std::ios::binary | std::ios::trunc);
-    output << root.dump();
-}
-
-std::optional<UserRecord> find_user(const std::vector<UserRecord>& users, const std::string& username) {
-    const auto it = std::find_if(users.begin(), users.end(), [&](const UserRecord& user) {
-        return user.username == username;
-    });
-    if (it == users.end()) {
+std::optional<UserRecord> find_user(sql::Connection& connection, const std::string& username) {
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection.prepareStatement(
+            "SELECT username, password_hash, created_at FROM users WHERE username = ?")};
+    statement->setString(1, username);
+    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+    if (!result->next()) {
         return std::nullopt;
     }
-    return *it;
+
+    UserRecord user;
+    user.username = result->getString("username");
+    user.password_hash = result->getString("password_hash");
+    user.created_at = result->getInt64("created_at");
+    return user;
 }
 
 std::string hmac_sha256(const std::string& data, const std::string& secret) {
@@ -245,21 +184,28 @@ std::optional<AuthenticatedUser> parse_token(const std::string& token) {
 
 } // namespace
 
-AuthService::AuthService(std::filesystem::path users_file)
-    : users_file_(resolve_users_path(std::move(users_file))) {}
+AuthService::AuthService()
+    : mysql_client_{} {}
+
+AuthService::AuthService(MySqlClient mysql_client)
+    : mysql_client_(std::move(mysql_client)) {}
 
 std::string AuthService::register_user(const std::string& username, const std::string& password) const {
     validate_username(username);
     validate_password(password);
 
-    std::lock_guard<std::mutex> guard(users_mutex());
-    auto users = load_users_from_file(users_file_);
-    if (find_user(users, username)) {
+    auto connection = mysql_client_.create_connection();
+    if (find_user(*connection, username)) {
         throw std::runtime_error("username already exists");
     }
 
-    users.push_back(UserRecord{username, bcrypt_hash(password), unix_now()});
-    save_users_to_file(users_file_, users);
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)")};
+    statement->setString(1, username);
+    statement->setString(2, bcrypt_hash(password));
+    statement->setInt64(3, unix_now());
+    statement->executeUpdate();
     return create_token(username);
 }
 
@@ -267,9 +213,8 @@ std::string AuthService::login_user(const std::string& username, const std::stri
     validate_username(username);
     validate_password(password);
 
-    std::lock_guard<std::mutex> guard(users_mutex());
-    const auto users = load_users_from_file(users_file_);
-    const auto user = find_user(users, username);
+    auto connection = mysql_client_.create_connection();
+    const auto user = find_user(*connection, username);
     if (!user || !bcrypt_verify(password, user->password_hash)) {
         throw std::runtime_error("invalid username or password");
     }

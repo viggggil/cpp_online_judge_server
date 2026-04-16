@@ -2,8 +2,8 @@
 
 #include "common/platform_types.h"
 #include "common/protocol.hpp"
+#include "services/oj_server/mysql_client.h"
 
-#include <filesystem>
 #include <optional>
 #include <vector>
 
@@ -11,7 +11,8 @@ namespace oj::server {
 
 class ProblemRepository {
 public:
-    explicit ProblemRepository(std::filesystem::path root = "problems");
+    ProblemRepository();
+    explicit ProblemRepository(MySqlClient mysql_client);
 
     std::vector<oj::common::ProblemSummary> list() const;
     std::vector<oj::protocol::ProblemMeta> list_problem_meta() const;
@@ -19,7 +20,7 @@ public:
     std::vector<oj::protocol::TestCase> load_test_cases(std::int64_t problem_id) const;
 
 private:
-    std::filesystem::path root_;
+    MySqlClient mysql_client_;
 };
 
 } // namespace oj::server

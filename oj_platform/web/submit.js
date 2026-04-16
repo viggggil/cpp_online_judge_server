@@ -4,6 +4,7 @@ function problemIdFromPath() {
 }
 
 async function loadProblemInfo() {
+  await window.ojAuth.initAuth();
   if (!window.ojAuth.protectPage()) {
     return;
   }
@@ -16,6 +17,10 @@ async function loadProblemInfo() {
 }
 
 async function submitCode() {
+  await window.ojAuth.initAuth();
+  if (!window.ojAuth.requireLogin('提交代码前请先登录')) {
+    return;
+  }
   const id = problemIdFromPath();
   const sourceCode = document.getElementById('source_code').value;
   const language = document.getElementById('language').value;

@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = 'oj_platform_jwt';
   const USERNAME_KEY = 'oj_platform_username';
+  let authSyncPromise = null;
 
   function getToken() {
     return localStorage.getItem(STORAGE_KEY) || '';
@@ -31,10 +32,52 @@
     }
     const response = await fetch(url, { ...options, headers });
     if (response.status === 401) {
+      clearSession();
+      updateAuthUI();
       openAuthModal('login', '请先登录后再继续操作');
       throw new Error('请先登录');
     }
     return response;
+  }
+
+  async function syncSession() {
+    if (!getToken()) {
+      updateAuthUI();
+      return false;
+    }
+
+    try {
+      const response = await fetch('/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${getToken()}`
+        }
+      });
+
+      if (!response.ok) {
+        clearSession();
+        updateAuthUI();
+        return false;
+      }
+
+      const data = await response.json();
+      if (data.username) {
+        setSession(getToken(), data.username);
+      }
+      updateAuthUI();
+      return true;
+    } catch (_) {
+      updateAuthUI();
+      return Boolean(getToken());
+    }
+  }
+
+  function initAuth() {
+    if (!authSyncPromise) {
+      authSyncPromise = syncSession().finally(() => {
+        authSyncPromise = null;
+      });
+    }
+    return authSyncPromise;
   }
 
   function ensureAuthShell() {
@@ -164,6 +207,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     ensureAuthShell();
     updateAuthUI();
+    initAuth();
   });
 
   window.ojAuth = {
@@ -173,6 +217,8 @@
     authFetch,
     requireLogin,
     protectPage,
+    syncSession,
+    initAuth,
     openAuthModal,
     clearSession,
     updateAuthUI,

@@ -4,6 +4,7 @@ function problemIdFromPath() {
 }
 
 async function loadProblem() {
+  await window.ojAuth.initAuth();
   if (!window.ojAuth.protectPage()) {
     return;
   }

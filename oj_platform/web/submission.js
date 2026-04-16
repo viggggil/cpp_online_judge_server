@@ -34,6 +34,7 @@ function renderSummaryStatus(status) {
 }
 
 async function fetchSubmission() {
+  await window.ojAuth.initAuth();
   if (!window.ojAuth.protectPage()) {
     return null;
   }

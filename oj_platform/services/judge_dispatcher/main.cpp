@@ -138,7 +138,6 @@ void save_submission_record(const std::filesystem::path& submissions_root,
 }
 
 void process_task(const std::string& payload,
-                  const std::filesystem::path& problems_root,
                   const std::filesystem::path& submissions_root) {
     const auto json = crow::json::load(payload);
     if (!json) {
@@ -155,7 +154,7 @@ void process_task(const std::string& payload,
     record.detail = "submission is being judged";
     save_submission_record(submissions_root, record);
 
-    oj::server::ProblemRepository repository{problems_root};
+    oj::server::ProblemRepository repository;
     const auto problem_id = parse_problem_id(problem_id_text);
     const auto detail = repository.find_detail(problem_id);
     if (!detail) {
@@ -189,7 +188,6 @@ int main() {
     std::signal(SIGINT, handle_signal);
     std::signal(SIGTERM, handle_signal);
 
-    const auto problems_root = resolve_runtime_path("problems");
     const auto submissions_root = resolve_runtime_path("runtime/submissions");
     const oj::common::RedisConfig redis_config{};
 
@@ -205,7 +203,7 @@ int main() {
             if (!payload) {
                 continue;
             }
-            process_task(*payload, problems_root, submissions_root);
+            process_task(*payload, submissions_root);
         } catch (const std::exception& ex) {
             std::fprintf(stderr, "judge_dispatcher error: %s\n", ex.what());
             std::this_thread::sleep_for(std::chrono::milliseconds(200));

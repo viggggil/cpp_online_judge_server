@@ -1,8 +1,9 @@
 #pragma once
 
-#include <filesystem>
 #include <optional>
 #include <string>
+
+#include "services/oj_server/mysql_client.h"
 
 namespace oj::server {
 
@@ -12,14 +13,15 @@ struct AuthenticatedUser {
 
 class AuthService {
 public:
-    explicit AuthService(std::filesystem::path users_file = "runtime/users/users.json");
+    AuthService();
+    explicit AuthService(MySqlClient mysql_client);
 
     std::string register_user(const std::string& username, const std::string& password) const;
     std::string login_user(const std::string& username, const std::string& password) const;
     std::optional<AuthenticatedUser> verify_token(const std::string& token) const;
 
 private:
-    std::filesystem::path users_file_;
+    MySqlClient mysql_client_;
 };
 
 } // namespace oj::server

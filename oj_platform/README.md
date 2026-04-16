@@ -2,6 +2,58 @@
 
 一个基于 **Crow** 实现的轻量级在线判题平台原型工程，目标是逐步演进成“题库 + 提交 + 判题 + 负载均衡 worker + Web 前端”的完整 OJ 系统。
 
+## MySQL 接入说明
+
+当前版本已将以下数据源切换为 MySQL：
+
+- 用户信息：`users`
+- 题目元数据：`problems`
+- 题面：`problem_statements`
+- 题目标签：`problem_tags`
+- 测试点源数据：`problem_testcases`
+
+说明：磁盘中的 `problems/<id>/tests/*.in`、`*.out` 仍然保留，便于本地维护与迁移；数据库中同步存储测试点源数据，供 `oj_server` 统一读取。
+
+### 建表
+
+先创建数据库，再执行：
+
+```bash
+mysql -uroot -p oj_platform < /home/max85/webserver/oj_platform/sql/schema.sql
+```
+
+### 构建依赖
+
+除 Crow / Redis 相关依赖外，还需要安装 MySQL Connector/C++ 开发包，要求提供：
+
+- `cppconn/connection.h`
+- `libmysqlcppconn` 或 `libmysqlcppconn8`
+
+如果本机尚未安装该开发包，CMake 会直接报错：
+
+```text
+MySQL Connector/C++ not found. Please install mysqlcppconn development package.
+```
+
+### 迁移题目数据
+
+```bash
+/home/max85/webserver/oj_platform/build/problem_migrator
+```
+
+该工具会扫描 `problems/` 目录，并把 `meta.json`、`statement_zh.md`、`tests/*.in`、`tests/*.out` 导入 MySQL。
+
+### 运行说明
+
+`oj_server` 的题目接口与认证接口现在依赖 MySQL：
+
+- `/api/problems`
+- `/api/problems/:id`
+- `/api/auth/register`
+- `/api/auth/login`
+
+如需修改连接参数，请调整 `common/platform_config.h` 中的 `MySqlConfig` 默认值，或后续再扩展为环境变量/配置文件。
+
 当前仓库已经不是只有目录骨架，而是具备了一个可以运行和演示的最小版本：
 
 - 使用 `Crow` 作为第三方 Web 框架
@@ -135,6 +187,8 @@ oj_platform/
 - hiredis
 - redis++
 - Redis Server（运行异步评测链路时需要）
+
+> 注意：由于 `judge_dispatcher` 使用的是 Redis 阻塞队列消费，如果 Redis 连接超时时间过短，会出现“任务已经入队但长期停留在 QUEUED”的现象。当前默认超时已调大到 5 秒，以避免 `BLPOP` 被过早打断。
 
 ### 构建命令
 
