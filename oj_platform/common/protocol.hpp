@@ -67,6 +67,7 @@ struct TestCaseResult {
     JudgeStatus status{JudgeStatus::system_error};
     std::int32_t time_used_ms{0};
     std::int32_t memory_used_kb{0};
+    std::string input;
     std::string actual_output;
     std::string expected_output;
     std::string error_message;

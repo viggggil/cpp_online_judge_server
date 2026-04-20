@@ -100,6 +100,7 @@ crow::json::wvalue build_submission_record_json(const oj::common::SubmissionResu
     for (const auto& tc : result.judge_response.test_case_results) {
         crow::json::wvalue item;
         item["status"] = std::string{oj::protocol::to_string(tc.status)};
+        item["input"] = tc.input;
         item["time_used_ms"] = tc.time_used_ms;
         item["memory_used_kb"] = tc.memory_used_kb;
         item["actual_output"] = tc.actual_output;
@@ -167,6 +168,7 @@ oj::common::SubmissionResult parse_submission_record(const crow::json::rvalue& j
                 tc.status = item.has("status") ? parse_judge_status(item["status"].s()) : oj::protocol::JudgeStatus::system_error;
                 tc.time_used_ms = item.has("time_used_ms") ? item["time_used_ms"].i() : 0;
                 tc.memory_used_kb = item.has("memory_used_kb") ? item["memory_used_kb"].i() : 0;
+                tc.input = item.has("input") ? std::string{item["input"].s()} : std::string{};
                 tc.actual_output = item.has("actual_output") ? std::string{item["actual_output"].s()} : std::string{};
                 tc.expected_output = item.has("expected_output") ? std::string{item["expected_output"].s()} : std::string{};
                 tc.error_message = item.has("error_message") ? std::string{item["error_message"].s()} : std::string{};

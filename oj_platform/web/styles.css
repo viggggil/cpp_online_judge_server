@@ -55,6 +55,58 @@ body {
 .back-link { color: #2563eb; text-decoration: none; }
 .status-ok { color: #059669; font-weight: 700; }
 .status-bad { color: #dc2626; font-weight: 700; }
+.hidden { display: none; }
+
+.case-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.case-summary-row h3 {
+  margin: 0;
+}
+
+.case-summary-metrics {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #4b5563;
+  font-size: 14px;
+}
+
+.case-toggle {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.case-detail {
+  margin-top: 12px;
+  border-top: 1px dashed #e5e7eb;
+  padding-top: 12px;
+}
+
+.case-detail-block + .case-detail-block {
+  margin-top: 10px;
+}
+
+.case-detail-label {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.case-detail-content {
+  margin: 0;
+  white-space: pre-wrap;
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 10px;
+  overflow-wrap: anywhere;
+}
 
 #polling-hint {
   margin-top: 12px;

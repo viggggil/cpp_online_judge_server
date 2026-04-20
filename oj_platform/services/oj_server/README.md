@@ -12,11 +12,29 @@
 当前实现特点：
 
 - 使用 Crow 提供 HTTP 路由
-- 题库直接从 `problems/` 目录读取
+- 题目、题面、测试点统一从 MySQL 读取
 - 提交结果保存在 `runtime/submissions/`
 - 用户信息保存在 `runtime/users/users.json`
 - 登录态使用 JWT
 - 密码使用 bcrypt 哈希
+- MySQL 访问通过简单连接池复用连接
+
+## 提交结果页显示
+
+- 默认只显示每个测试点的状态、耗时、内存占用
+- 点击下箭头后展开详细信息
+- 详细信息包含输入、期望输出、实际输出、错误信息
+- 过长内容默认只展示前缀并追加省略号，避免页面过长
+
+## 题目录入约定
+
+新增题目时，先把题目源文件放在 `problems/<id>/` 下维护，再执行：
+
+```bash
+cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
+```
+
+迁移完成后，`oj_server` 才能正常查询该题并接受提交。
 
 当前还属于原型结构，后续可继续增强：
 

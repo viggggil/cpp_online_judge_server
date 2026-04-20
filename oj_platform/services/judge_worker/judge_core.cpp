@@ -121,6 +121,7 @@ oj::protocol::TestCaseResult JudgeCore::run_single_testcase(const std::string& e
                                             run_work_directory);
 
     oj::protocol::TestCaseResult result;
+    result.input = test_case.input;
     result.expected_output = test_case.expected_output;
     result.actual_output = run_result.stdout_text;
     result.time_used_ms = run_result.time_used_ms;

@@ -4,6 +4,60 @@
 
 ## MySQL 接入说明
 
+## Docker Compose（MySQL + Redis）
+
+当前已经补充 `docker-compose.yml`，先把 **MySQL** 和 **Redis** 以容器方式运行起来，后续如果要把 `oj_server`、`judge_dispatcher`、`judge_worker` 也一起容器化，可以继续在这个 compose 文件上扩展。
+
+### 启动数据库与缓存
+
+```bash
+cd /home/max85/webserver/oj_platform
+docker compose up -d mysql redis
+```
+
+### 停止服务
+
+```bash
+cd /home/max85/webserver/oj_platform
+docker compose down
+```
+
+### 服务说明
+
+- MySQL
+  - 容器名：`oj_platform_mysql`
+  - 端口映射：`3306:3306`
+  - 数据库名：`oj_platform`
+  - 普通用户：`oj`
+  - 密码：`oj123456`
+  - root 密码：`root123456`
+- Redis
+  - 容器名：`oj_platform_redis`
+  - 端口映射：`6379:6379`
+
+### 初始化说明
+
+- `sql/schema.sql` 已挂载到 MySQL 容器的 `/docker-entrypoint-initdb.d/01-schema.sql`
+- **仅在 MySQL 数据目录第一次初始化时自动执行**
+- 如果你已经存在旧的数据卷，又想重新初始化表结构，可以执行：
+
+```bash
+cd /home/max85/webserver/oj_platform
+docker compose down -v
+docker compose up -d mysql redis
+```
+
+### 与当前代码默认配置的关系
+
+当前 `common/platform_config.h` 中默认连接地址仍然是：
+
+- MySQL：`127.0.0.1:3306`
+- Redis：`127.0.0.1:6379`
+
+因为 compose 已经把容器端口映射到宿主机，所以 **当前直接在宿主机运行 `oj_server` / `judge_dispatcher` 时，无需改代码配置**。
+
+> 如果后续把 `oj_server` 等服务也一起放入 Docker 容器，则建议把连接地址改为 compose 服务名（如 `mysql`、`redis`），并进一步把配置改造成环境变量读取方式。
+
 当前版本已将以下数据源切换为 MySQL：
 
 - 用户信息：`users`
@@ -12,7 +66,7 @@
 - 题目标签：`problem_tags`
 - 测试点源数据：`problem_testcases`
 
-说明：磁盘中的 `problems/<id>/tests/*.in`、`*.out` 仍然保留，便于本地维护与迁移；数据库中同步存储测试点源数据，供 `oj_server` 统一读取。
+说明：磁盘中的 `problems/<id>/tests/*.in`、`*.out` 作为**题目录入源文件**保留；`oj_server` 运行时仅从 MySQL 读取题目、题面和测试点。新增题目后必须执行迁移，把数据写入数据库。
 
 ### 建表
 
@@ -38,10 +92,27 @@ MySQL Connector/C++ not found. Please install mysqlcppconn development package.
 ### 迁移题目数据
 
 ```bash
-/home/max85/webserver/oj_platform/build/problem_migrator
+/home/max85/webserver/oj_platform/build-mysql-check/problem_migrator
 ```
 
 该工具会扫描 `problems/` 目录，并把 `meta.json`、`statement_zh.md`、`tests/*.in`、`tests/*.out` 导入 MySQL。
+
+### 新增 / 更新题目的标准流程
+
+1. 在 `problems/<id>/` 下维护题目源文件：
+   - `meta.json`
+   - `statement_zh.md`
+   - `tests/*.in`
+   - `tests/*.out`
+2. 执行迁移工具，把题目同步进 MySQL：
+
+```bash
+cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
+```
+
+3. 重启 `oj_server` / `judge_dispatcher`，确保新数据生效。
+
+> 约定：以后新增题目时，**以数据库数据为准**；不要再依赖 `oj_server` 直接从本地目录兜底读题。
 
 ### 运行说明
 
@@ -59,12 +130,14 @@ MySQL Connector/C++ not found. Please install mysqlcppconn development package.
 - 使用 `Crow` 作为第三方 Web 框架
 - 拥有 `oj_server` 与 `judge_worker` 两个服务目标
 - 支持题目列表、题目详情、代码提交、提交结果查看
-- 支持本地题库存储与测试点读取
+- 支持基于 MySQL 的题目、题面与测试点读取
 - 支持用户注册 / 登录
 - 密码采用 `bcrypt` 哈希保存
 - 登录态采用 JWT
 - 前端页面支持登录弹窗、提交与结果展示
+- 提交结果页支持测试点折叠详情查看（默认只展示状态、耗时、内存）
 - 支持 Redis 提交队列、异步评测状态流转与轮询展示
+- MySQL 访问已封装为连接池
 
 > 说明：当前版本已把“提交入口”和“判题消费”拆成异步队列模型：`oj_server` 负责入队，`judge_dispatcher` 负责消费并调用本地判题核心；后续可以继续把 dispatcher 演进成真正的远程调度和多 worker 负载均衡架构。
 
@@ -79,7 +152,7 @@ MySQL Connector/C++ not found. Please install mysqlcppconn development package.
 - [x] `oj_server` 路由与静态资源服务
 - [x] 题目列表 / 题面详情 API
 - [x] 提交代码 / 查询提交结果 API
-- [x] 本地测试点驱动的判题流程
+- [x] MySQL 题库存储 + 判题流程
 - [x] 登录注册能力
 - [x] JWT 鉴权
 - [x] Web 端登录弹窗与登录态控制

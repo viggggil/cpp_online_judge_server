@@ -20,8 +20,8 @@ struct RedisConfig {
 struct MySqlConfig {
     const char* host{"127.0.0.1"};
     int port{3306};
-    const char* username{"root"};
-    const char* password{""};
+    const char* username{"oj"};
+    const char* password{"oj123456"};
     const char* database{"oj_platform"};
     const char* charset{"utf8mb4"};
     bool auto_reconnect{true};

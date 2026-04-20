@@ -1,0 +1,13 @@
+{
+  "id": 1006,
+  "title": "Brackets",
+  "time_limit_ms": 3000,
+  "memory_limit_mb": 1024,
+  "tags": [
+    "hard",
+    "data-structures",
+    "strings",
+    "hashing",
+    "brackets"
+  ]
+}

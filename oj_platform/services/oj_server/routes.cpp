@@ -131,6 +131,7 @@ crow::json::wvalue make_submission_json(const oj::common::SubmissionResult& resu
     for (const auto& tc : result.judge_response.test_case_results) {
         crow::json::wvalue item;
         item["status"] = std::string{oj::protocol::to_string(tc.status)};
+        item["input"] = tc.input;
         item["time_used_ms"] = tc.time_used_ms;
         item["memory_used_kb"] = tc.memory_used_kb;
         item["actual_output"] = tc.actual_output;
