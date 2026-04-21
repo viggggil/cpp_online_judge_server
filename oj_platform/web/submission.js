@@ -73,6 +73,7 @@ async function fetchSubmission() {
 function renderSubmission(data) {
   document.getElementById('summary').innerHTML = `
 提交号: ${data.submission_id}\n
+提交用户: ${escapeHtml(data.username || '')}\n
 题号: ${data.problem_id}\n
 语言: ${data.language}\n
 状态: ${renderSummaryStatus(data.status)}\n

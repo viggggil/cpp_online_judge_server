@@ -3,6 +3,7 @@
 #include "common/path_utils.h"
 #include "services/oj_server/problem_repository.h"
 #include "services/oj_server/redis_client.h"
+#include "services/oj_server/submission_repository.h"
 
 #include <crow/json.h>
 
@@ -187,12 +188,14 @@ JudgeService::JudgeService(std::filesystem::path problems_root,
     : problems_root_(std::move(problems_root)),
       submissions_root_(resolve_runtime_path(std::move(submissions_root))) {}
 
-oj::common::SubmissionResult JudgeService::submit(const oj::common::SubmissionRequest& request) const {
+oj::common::SubmissionResult JudgeService::submit(const std::string& username,
+                                                  const oj::common::SubmissionRequest& request) const {
     const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
     const auto submission_id = "sub-" + std::to_string(tick);
 
     oj::common::SubmissionResult result;
     result.submission_id = submission_id;
+    result.username = username;
     result.problem_id = request.problem_id;
     result.language = request.language;
     result.source_code = request.source_code;
@@ -212,6 +215,10 @@ oj::common::SubmissionResult JudgeService::submit(const oj::common::SubmissionRe
         result.status = "QUEUED";
         result.accepted = false;
         result.detail = build_submission_detail(result.status);
+
+        SubmissionRepository submission_repository;
+        submission_repository.create_submission(result.submission_id, username, request,
+                                                result.status, result.detail);
 
         persist_text_file(submissions_root_ / submission_id / "source.cpp", request.source_code);
         persist_text_file(submissions_root_ / submission_id / "result.json",
@@ -246,15 +253,25 @@ oj::common::SubmissionResult JudgeService::submit(const oj::common::SubmissionRe
     persist_text_file(submissions_root_ / submission_id / "source.cpp", request.source_code);
     persist_text_file(submissions_root_ / submission_id / "result.json",
                       build_submission_record_json(result).dump());
+
+    try {
+        SubmissionRepository submission_repository;
+        submission_repository.update_submission(result);
+    } catch (...) {
+    }
+
     return result;
 }
 
-std::optional<oj::common::SubmissionResult> JudgeService::find_submission(const std::string& submission_id) const {
-    const auto json = load_json_file(submissions_root_ / submission_id / "result.json");
-    if (!json) {
+std::optional<oj::common::SubmissionResult> JudgeService::find_submission(const std::string& username,
+                                                                          const std::string& submission_id) const {
+    SubmissionRepository submission_repository;
+    const auto stored = submission_repository.find_submission_for_user(submission_id, username);
+    if (!stored) {
         return std::nullopt;
     }
-    auto result = parse_submission_record(*json);
+
+    auto result = stored->result;
     if (result.detail.empty()) {
         result.detail = build_submission_detail(result.status);
     }
@@ -262,6 +279,11 @@ std::optional<oj::common::SubmissionResult> JudgeService::find_submission(const 
         result.accepted = false;
     }
     return result;
+}
+
+std::vector<oj::common::SubmissionListItem> JudgeService::list_submissions(const std::string& username) const {
+    SubmissionRepository submission_repository;
+    return submission_repository.list_submissions_for_user(username);
 }
 
 } // namespace oj::server

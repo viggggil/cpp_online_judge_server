@@ -111,6 +111,7 @@ crow::json::wvalue make_problem_detail_json(const oj::protocol::ProblemDetail& p
 crow::json::wvalue make_submission_json(const oj::common::SubmissionResult& result) {
     crow::json::wvalue body;
     body["submission_id"] = result.submission_id;
+    body["username"] = result.username;
     body["problem_id"] = result.problem_id;
     body["language"] = result.language;
     body["status"] = result.status;
@@ -144,6 +145,28 @@ crow::json::wvalue make_submission_json(const oj::common::SubmissionResult& resu
     return body;
 }
 
+crow::json::wvalue make_submission_list_json(const std::vector<oj::common::SubmissionListItem>& submissions) {
+    crow::json::wvalue::list items;
+    for (const auto& submission : submissions) {
+        crow::json::wvalue item;
+        item["submission_id"] = submission.submission_id;
+        item["problem_id"] = submission.problem_id;
+        item["language"] = submission.language;
+        item["status"] = submission.status;
+        item["final_status"] = submission.final_status;
+        item["accepted"] = submission.accepted;
+        item["detail"] = submission.detail;
+        item["created_at"] = submission.created_at;
+        item["total_time_used_ms"] = submission.total_time_used_ms;
+        item["peak_memory_used_kb"] = submission.peak_memory_used_kb;
+        items.push_back(std::move(item));
+    }
+
+    crow::json::wvalue body;
+    body["submissions"] = std::move(items);
+    return body;
+}
+
 crow::json::wvalue make_problem_list_json(const std::vector<oj::common::ProblemSummary>& problems) {
     crow::json::wvalue::list items;
     for (const auto& problem : problems) {
@@ -172,6 +195,10 @@ void register_routes(crow::Crow<>& app) {
 
     CROW_ROUTE(app, "/submit/<int>")([](std::int64_t) {
         return serve_file(resolve_web_path(std::filesystem::path{"web"} / "submit.html"));
+    });
+
+    CROW_ROUTE(app, "/submissions")([] {
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "submissions.html"));
     });
 
     CROW_ROUTE(app, "/submissions/<string>")([](const std::string&) {
@@ -293,8 +320,18 @@ void register_routes(crow::Crow<>& app) {
             json["source_code"].s()};
 
         JudgeService judge_service;
-        const auto result = judge_service.submit(request);
+        const auto result = judge_service.submit(user->username, request);
         return crow::response{202, make_submission_json(result)};
+    });
+
+    CROW_ROUTE(app, "/api/submissions").methods(crow::HTTPMethod::GET)([](const crow::request& req) {
+        const auto user = require_user(req);
+        if (!user) {
+            return json_error(401, "please login first");
+        }
+
+        JudgeService judge_service;
+        return crow::response{200, make_submission_list_json(judge_service.list_submissions(user->username))};
     });
 
     CROW_ROUTE(app, "/api/submissions/<string>")([](const crow::request& req, const std::string& submission_id) {
@@ -304,7 +341,7 @@ void register_routes(crow::Crow<>& app) {
         }
 
         JudgeService judge_service;
-        const auto result = judge_service.find_submission(submission_id);
+        const auto result = judge_service.find_submission(user->username, submission_id);
         if (!result) {
             return json_error(404, "submission not found");
         }

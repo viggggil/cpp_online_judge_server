@@ -5,6 +5,7 @@
 #include "services/judge_dispatcher/worker_client.h"
 #include "services/oj_server/problem_repository.h"
 #include "services/oj_server/redis_client.h"
+#include "services/oj_server/submission_repository.h"
 
 #include <crow/json.h>
 
@@ -137,6 +138,9 @@ void save_submission_record(const std::filesystem::path& submissions_root,
                             const oj::common::SubmissionResult& result) {
     persist_text_file(submissions_root / result.submission_id / "result.json",
                       build_submission_record_json(result).dump());
+
+    oj::server::SubmissionRepository submission_repository;
+    submission_repository.update_submission(result);
 }
 
 void process_task(const std::string& payload,

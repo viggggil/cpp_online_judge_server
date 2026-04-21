@@ -12,8 +12,11 @@ public:
     JudgeService(std::filesystem::path problems_root = "problems",
                  std::filesystem::path submissions_root = "runtime/submissions");
 
-    oj::common::SubmissionResult submit(const oj::common::SubmissionRequest& request) const;
-    std::optional<oj::common::SubmissionResult> find_submission(const std::string& submission_id) const;
+    oj::common::SubmissionResult submit(const std::string& username,
+                                        const oj::common::SubmissionRequest& request) const;
+    std::optional<oj::common::SubmissionResult> find_submission(const std::string& username,
+                                                                const std::string& submission_id) const;
+    std::vector<oj::common::SubmissionListItem> list_submissions(const std::string& username) const;
 
 private:
     std::filesystem::path problems_root_;

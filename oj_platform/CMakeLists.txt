@@ -40,6 +40,7 @@ add_executable(oj_server
     services/oj_server/routes.cpp
     services/oj_server/auth_service.cpp
     services/oj_server/judge_service.cpp
+    services/oj_server/submission_repository.cpp
     services/oj_server/problem_repository.cpp
     services/oj_server/mysql_client.cpp
     services/oj_server/redis_client.cpp
@@ -61,6 +62,7 @@ add_executable(judge_dispatcher
     services/judge_dispatcher/dispatcher_utils.cpp
     services/judge_dispatcher/worker_client.cpp
     services/oj_server/problem_repository.cpp
+    services/oj_server/submission_repository.cpp
     services/oj_server/mysql_client.cpp
     services/oj_server/redis_client.cpp
 )

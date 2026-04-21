@@ -1,4 +1,5 @@
 async function loadProblems() {
+  await window.ojAuth.initAuth();
   const container = document.getElementById('problem-list');
   container.innerHTML = '加载中...';
   const response = await fetch('/api/problems');
@@ -31,6 +32,12 @@ async function loadProblems() {
 
     container.appendChild(item);
   }
+
+  document.getElementById('nav-submissions')?.addEventListener('click', (event) => {
+    if (!window.ojAuth.requireLogin('查看提交记录前请先登录')) {
+      event.preventDefault();
+    }
+  });
 }
 
 loadProblems().catch(err => {
