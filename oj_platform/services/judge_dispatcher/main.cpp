@@ -1,7 +1,7 @@
 #include "common/path_utils.h"
 #include "common/platform_config.h"
 #include "common/platform_types.h"
-#include "services/judge_worker/judge_core.h"
+#include "services/judge_dispatcher/worker_client.h"
 #include "services/oj_server/problem_repository.h"
 #include "services/oj_server/redis_client.h"
 
@@ -175,8 +175,8 @@ void process_task(const std::string& payload,
     judge_request.memory_limit_mb = detail->memory_limit_mb;
     judge_request.test_cases = repository.load_test_cases(problem_id);
 
-    oj::worker::JudgeCore judge_core;
-    record.judge_response = judge_core.judge(judge_request);
+    oj::dispatcher::WorkerClient worker_client{oj::common::JudgeWorkerEndpoint{}};
+    record.judge_response = worker_client.judge(judge_request);
     record.status = std::string{oj::protocol::to_string(record.judge_response.final_status)};
     record.accepted = (record.judge_response.final_status == oj::protocol::JudgeStatus::ok);
     record.detail = build_submission_detail(record.judge_response);

@@ -55,6 +55,7 @@ target_link_libraries(judge_worker PRIVATE Crow::Crow oj_judge_core)
 
 add_executable(judge_dispatcher
     services/judge_dispatcher/main.cpp
+    services/judge_dispatcher/worker_client.cpp
     services/oj_server/problem_repository.cpp
     services/oj_server/mysql_client.cpp
     services/oj_server/redis_client.cpp

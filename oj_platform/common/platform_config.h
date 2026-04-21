@@ -30,6 +30,9 @@ struct MySqlConfig {
 struct JudgeWorkerEndpoint {
     const char* host{"127.0.0.1"};
     int port{18081};
+    const char* judge_api_path{"/api/judge"};
+    int connect_timeout_ms{3000};
+    int read_timeout_ms{30000};
 };
 
 } // namespace oj::common
