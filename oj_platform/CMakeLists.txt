@@ -24,13 +24,16 @@ endif()
 add_subdirectory(third_party/crow)
 
 add_library(oj_judge_core
+    common/protocol_json.cpp
     common/path_utils.cpp
     services/judge_worker/judge_core.cpp
+    services/judge_worker/judge_summary.cpp
     services/judge_worker/compile_service.cpp
     services/judge_worker/run_service.cpp
 )
 
 target_include_directories(oj_judge_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(oj_judge_core PUBLIC Crow::Crow)
 
 add_executable(oj_server
     services/oj_server/main.cpp
@@ -55,6 +58,7 @@ target_link_libraries(judge_worker PRIVATE Crow::Crow oj_judge_core)
 
 add_executable(judge_dispatcher
     services/judge_dispatcher/main.cpp
+    services/judge_dispatcher/dispatcher_utils.cpp
     services/judge_dispatcher/worker_client.cpp
     services/oj_server/problem_repository.cpp
     services/oj_server/mysql_client.cpp
@@ -72,3 +76,29 @@ add_executable(problem_migrator
 
 target_include_directories(problem_migrator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MYSQLCPP_INCLUDE_DIR})
 target_link_libraries(problem_migrator PRIVATE Crow::Crow ${MYSQLCPP_LIBRARY})
+
+if(OJ_PLATFORM_BUILD_TESTS)
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+
+    enable_testing()
+
+    add_executable(oj_platform_unit_tests
+        tests/protocol_json_test.cpp
+        tests/dispatcher_utils_test.cpp
+        tests/judge_summary_test.cpp
+        common/protocol_json.cpp
+        services/judge_dispatcher/dispatcher_utils.cpp
+        services/judge_worker/judge_summary.cpp
+    )
+    target_include_directories(oj_platform_unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(oj_platform_unit_tests PRIVATE Crow::Crow GTest::gtest_main)
+
+    include(GoogleTest)
+    gtest_discover_tests(oj_platform_unit_tests)
+endif()

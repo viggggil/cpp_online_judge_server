@@ -1,5 +1,6 @@
 #include "services/judge_dispatcher/worker_client.h"
 
+#include "common/protocol_json.h"
 #include <crow/json.h>
 
 #include <arpa/inet.h>
@@ -34,72 +35,6 @@ public:
 private:
     int fd_{-1};
 };
-
-oj::protocol::JudgeStatus parse_judge_status(const std::string& text) {
-    if (text == "OK") return oj::protocol::JudgeStatus::ok;
-    if (text == "COMPILE_ERROR") return oj::protocol::JudgeStatus::compile_error;
-    if (text == "RUNTIME_ERROR") return oj::protocol::JudgeStatus::runtime_error;
-    if (text == "TIME_LIMIT_EXCEEDED") return oj::protocol::JudgeStatus::time_limit_exceeded;
-    if (text == "MEMORY_LIMIT_EXCEEDED") return oj::protocol::JudgeStatus::memory_limit_exceeded;
-    if (text == "WRONG_ANSWER") return oj::protocol::JudgeStatus::wrong_answer;
-    if (text == "PRESENTATION_ERROR") return oj::protocol::JudgeStatus::presentation_error;
-    return oj::protocol::JudgeStatus::system_error;
-}
-
-std::string build_request_json(const oj::protocol::JudgeRequest& request) {
-    crow::json::wvalue body;
-    body["submission_id"] = request.submission_id;
-    body["problem_id"] = request.problem_id;
-    body["language"] = std::string{oj::protocol::to_string(request.language)};
-    body["source_code"] = request.source_code;
-    body["time_limit_ms"] = request.time_limit_ms;
-    body["memory_limit_mb"] = request.memory_limit_mb;
-
-    crow::json::wvalue::list items;
-    for (const auto& test_case : request.test_cases) {
-        crow::json::wvalue item;
-        item["input"] = test_case.input;
-        item["expected_output"] = test_case.expected_output;
-        items.push_back(std::move(item));
-    }
-    body["test_cases"] = std::move(items);
-    return body.dump();
-}
-
-oj::protocol::JudgeResponse parse_response_json(const std::string& payload) {
-    const auto json = crow::json::load(payload);
-    if (!json) {
-        throw std::runtime_error("judge_worker returned invalid json");
-    }
-
-    oj::protocol::JudgeResponse response;
-    response.submission_id = json.has("submission_id") ? json["submission_id"].i() : 0;
-    response.final_status = json.has("final_status")
-                                ? parse_judge_status(std::string{json["final_status"].s()})
-                                : oj::protocol::JudgeStatus::system_error;
-    response.compile_success = json.has("compile_success") && json["compile_success"].b();
-    response.compile_stdout = json.has("compile_stdout") ? std::string{json["compile_stdout"].s()} : std::string{};
-    response.compile_stderr = json.has("compile_stderr") ? std::string{json["compile_stderr"].s()} : std::string{};
-    response.total_time_used_ms = json.has("total_time_used_ms") ? json["total_time_used_ms"].i() : 0;
-    response.peak_memory_used_kb = json.has("peak_memory_used_kb") ? json["peak_memory_used_kb"].i() : 0;
-    response.system_message = json.has("system_message") ? std::string{json["system_message"].s()} : std::string{};
-
-    if (json.has("test_case_results") && json["test_case_results"].t() == crow::json::type::List) {
-        for (const auto& item : json["test_case_results"]) {
-            oj::protocol::TestCaseResult result;
-            result.status = item.has("status") ? parse_judge_status(std::string{item["status"].s()}) : oj::protocol::JudgeStatus::system_error;
-            result.input = item.has("input") ? std::string{item["input"].s()} : std::string{};
-            result.time_used_ms = item.has("time_used_ms") ? item["time_used_ms"].i() : 0;
-            result.memory_used_kb = item.has("memory_used_kb") ? item["memory_used_kb"].i() : 0;
-            result.actual_output = item.has("actual_output") ? std::string{item["actual_output"].s()} : std::string{};
-            result.expected_output = item.has("expected_output") ? std::string{item["expected_output"].s()} : std::string{};
-            result.error_message = item.has("error_message") ? std::string{item["error_message"].s()} : std::string{};
-            response.test_case_results.push_back(std::move(result));
-        }
-    }
-
-    return response;
-}
 
 int connect_to_host(const oj::common::JudgeWorkerEndpoint& endpoint) {
     ::addrinfo hints{};
@@ -195,7 +130,7 @@ WorkerClient::WorkerClient(oj::common::JudgeWorkerEndpoint endpoint)
     : endpoint_(endpoint) {}
 
 oj::protocol::JudgeResponse WorkerClient::judge(const oj::protocol::JudgeRequest& request) const {
-    const auto payload = build_request_json(request);
+    const auto payload = oj::common::serialize_judge_request(request);
     const auto http_request = std::string{"POST "} + endpoint_.judge_api_path + " HTTP/1.1\r\n" +
                               "Host: " + endpoint_.host + ":" + std::to_string(endpoint_.port) + "\r\n" +
                               "Content-Type: application/json\r\n" +
@@ -206,7 +141,7 @@ oj::protocol::JudgeResponse WorkerClient::judge(const oj::protocol::JudgeRequest
     SocketHandle socket_handle{connect_to_host(endpoint_)};
     write_all(socket_handle.get(), http_request);
     const auto raw_response = read_all(socket_handle.get());
-    return parse_response_json(extract_http_body(raw_response));
+    return oj::common::deserialize_judge_response(extract_http_body(raw_response));
 }
 
 } // namespace oj::dispatcher

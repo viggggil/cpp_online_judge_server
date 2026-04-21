@@ -1,6 +1,7 @@
 #include "common/path_utils.h"
 #include "common/platform_config.h"
 #include "common/platform_types.h"
+#include "services/judge_dispatcher/dispatcher_utils.h"
 #include "services/judge_dispatcher/worker_client.h"
 #include "services/oj_server/problem_repository.h"
 #include "services/oj_server/redis_client.h"
@@ -176,10 +177,17 @@ void process_task(const std::string& payload,
     judge_request.test_cases = repository.load_test_cases(problem_id);
 
     oj::dispatcher::WorkerClient worker_client{oj::common::JudgeWorkerEndpoint{}};
-    record.judge_response = worker_client.judge(judge_request);
-    record.status = std::string{oj::protocol::to_string(record.judge_response.final_status)};
-    record.accepted = (record.judge_response.final_status == oj::protocol::JudgeStatus::ok);
-    record.detail = build_submission_detail(record.judge_response);
+    try {
+        record.judge_response = worker_client.judge(judge_request);
+        record.status = std::string{oj::protocol::to_string(record.judge_response.final_status)};
+        record.accepted = (record.judge_response.final_status == oj::protocol::JudgeStatus::ok);
+        record.detail = build_submission_detail(record.judge_response);
+    } catch (const std::exception& ex) {
+        oj::dispatcher::mark_submission_system_error(record, ex.what());
+    } catch (...) {
+        oj::dispatcher::mark_submission_system_error(record, "unknown worker error");
+    }
+
     save_submission_record(submissions_root, record);
 }
 
