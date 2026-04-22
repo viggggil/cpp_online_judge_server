@@ -1,17 +1,87 @@
 #include "services/oj_server/mysql_client.h"
 
+#include "common/path_utils.h"
+
 #include <cppconn/driver.h>
 #include <cppconn/exception.h>
 #include <cppconn/statement.h>
 #include <mysql_driver.h>
 
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <condition_variable>
+#include <cctype>
 #include <memory>
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
 
 namespace oj::server {
+
+namespace {
+
+std::once_flag g_schema_init_once;
+
+std::string trim_copy(std::string text) {
+    auto not_space = [](unsigned char ch) { return !std::isspace(ch); };
+    text.erase(text.begin(), std::find_if(text.begin(), text.end(), not_space));
+    text.erase(std::find_if(text.rbegin(), text.rend(), not_space).base(), text.end());
+    return text;
+}
+
+std::vector<std::string> split_sql_statements(const std::string& script) {
+    std::vector<std::string> statements;
+    std::string current;
+    bool in_single_quote = false;
+    bool in_double_quote = false;
+
+    for (std::size_t i = 0; i < script.size(); ++i) {
+        const char ch = script[i];
+        const char next = (i + 1 < script.size()) ? script[i + 1] : '\0';
+
+        if (!in_single_quote && !in_double_quote && ch == '-' && next == '-') {
+            while (i < script.size() && script[i] != '\n') {
+                ++i;
+            }
+            current.push_back('\n');
+            continue;
+        }
+
+        if (!in_single_quote && !in_double_quote && ch == '#') {
+            while (i < script.size() && script[i] != '\n') {
+                ++i;
+            }
+            current.push_back('\n');
+            continue;
+        }
+
+        if (ch == '\'' && !in_double_quote) {
+            in_single_quote = !in_single_quote;
+        } else if (ch == '"' && !in_single_quote) {
+            in_double_quote = !in_double_quote;
+        }
+
+        if (ch == ';' && !in_single_quote && !in_double_quote) {
+            auto statement = trim_copy(current);
+            if (!statement.empty()) {
+                statements.push_back(std::move(statement));
+            }
+            current.clear();
+            continue;
+        }
+
+        current.push_back(ch);
+    }
+
+    auto tail = trim_copy(current);
+    if (!tail.empty()) {
+        statements.push_back(std::move(tail));
+    }
+    return statements;
+}
+
+} // namespace
 
 MySqlClient::MySqlClient()
     : config_{},
@@ -31,6 +101,32 @@ std::string MySqlClient::build_uri() const {
     return uri.str();
 }
 
+std::filesystem::path MySqlClient::resolve_schema_path() const {
+    return oj::common::resolve_project_path(std::filesystem::path{"sql"} / "schema.sql");
+}
+
+void MySqlClient::initialize_schema(sql::Connection& connection) const {
+    std::call_once(g_schema_init_once, [&]() {
+        const auto schema_path = resolve_schema_path();
+        if (!std::filesystem::exists(schema_path)) {
+            throw std::runtime_error("schema.sql not found: " + schema_path.string());
+        }
+
+        std::ifstream input(schema_path, std::ios::in | std::ios::binary);
+        if (!input) {
+            throw std::runtime_error("failed to open schema.sql: " + schema_path.string());
+        }
+
+        std::ostringstream buffer;
+        buffer << input.rdbuf();
+        auto statements = split_sql_statements(buffer.str());
+        auto statement = std::unique_ptr<sql::Statement>{connection.createStatement()};
+        for (const auto& sql_text : statements) {
+            statement->execute(sql_text);
+        }
+    });
+}
+
 std::unique_ptr<sql::Connection> MySqlClient::open_new_connection() const {
     try {
         auto* driver = sql::mysql::get_driver_instance();
@@ -40,8 +136,17 @@ std::unique_ptr<sql::Connection> MySqlClient::open_new_connection() const {
             throw std::runtime_error("failed to create mysql connection");
         }
 
-        connection->setSchema(config_.database);
         connection->setClientOption("OPT_RECONNECT", &config_.auto_reconnect);
+
+        {
+            auto statement = std::unique_ptr<sql::Statement>{connection->createStatement()};
+            statement->execute("CREATE DATABASE IF NOT EXISTS `" + std::string{config_.database} +
+                               "` CHARACTER SET " + std::string{config_.charset} +
+                               " COLLATE utf8mb4_unicode_ci");
+        }
+
+        initialize_schema(*connection);
+        connection->setSchema(config_.database);
 
         auto statement = std::unique_ptr<sql::Statement>{connection->createStatement()};
         statement->execute("SET NAMES " + std::string{config_.charset});

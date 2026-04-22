@@ -3,6 +3,7 @@
 #include "common/platform_config.h"
 
 #include <condition_variable>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -36,6 +37,8 @@ private:
     std::shared_ptr<PoolState> pool_state_;
 
     std::string build_uri() const;
+    std::filesystem::path resolve_schema_path() const;
+    void initialize_schema(sql::Connection& connection) const;
     std::unique_ptr<sql::Connection> open_new_connection() const;
     void recycle_connection(std::unique_ptr<sql::Connection> connection) const;
 };
