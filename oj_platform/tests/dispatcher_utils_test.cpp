@@ -43,4 +43,25 @@ TEST(DispatcherUtilsTest, WorkerEndpointConfigurationParsingSupportsPathAndDefau
     EXPECT_STREQ(endpoints[1].judge_api_path, "/api/judge");
 }
 
+TEST(DispatcherUtilsTest, WorkerEndpointsCanBeLoadedFromThreeEnvironmentVariables) {
+    ::setenv("OJ_JUDGE_WORKERS", "", 1);
+    ::setenv("OJ_JUDGE_WORKER_1", "worker-a:18081/api/judge", 1);
+    ::setenv("OJ_JUDGE_WORKER_2", "worker-b:18082/custom", 1);
+    ::setenv("OJ_JUDGE_WORKER_3", "worker-c:18083", 1);
+
+    const auto endpoints = oj::dispatcher::parse_worker_endpoints_from_env();
+
+    ASSERT_EQ(endpoints.size(), 3u);
+    EXPECT_STREQ(endpoints[0].host, "worker-a");
+    EXPECT_EQ(endpoints[0].port, 18081);
+    EXPECT_STREQ(endpoints[1].judge_api_path, "/custom");
+    EXPECT_STREQ(endpoints[2].host, "worker-c");
+    EXPECT_EQ(endpoints[2].port, 18083);
+
+    ::unsetenv("OJ_JUDGE_WORKER_1");
+    ::unsetenv("OJ_JUDGE_WORKER_2");
+    ::unsetenv("OJ_JUDGE_WORKER_3");
+    ::unsetenv("OJ_JUDGE_WORKERS");
+}
+
 } // namespace

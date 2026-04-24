@@ -166,7 +166,7 @@ cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
 - [ ] 远程 `judge_worker` HTTP 调度与真正负载均衡
 - [ ] 多语言支持（当前主要按 C++17 路径组织）
 - [ ] 沙箱隔离进一步增强
-- [ ] 数据库存储用户/提交/题目元数据
+- [x] 数据库存储用户/提交/题目元数据
 - [ ] 管理后台、题目录入后台、队列监控面板
 - [ ] 更完整的单元测试与集成测试
 
@@ -186,7 +186,7 @@ oj_platform/
 │  └─ judge_dispatcher/     # 队列消费者：从 Redis 取任务并驱动判题
 ├─ problems/                # 题库数据（每题一个目录）
 ├─ web/                     # 前端静态页面与 JS/CSS
-├─ runtime/                 # 运行时数据：提交记录、用户文件等
+├─ runtime/                 # 运行时数据：日志、临时文件、沙箱目录等
 ├─ tests/                   # 测试代码目录（预留）
 └─ README.md
 ```

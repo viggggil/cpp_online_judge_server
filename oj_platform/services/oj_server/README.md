@@ -13,8 +13,8 @@
 
 - 使用 Crow 提供 HTTP 路由
 - 题目、题面、测试点统一从 MySQL 读取
-- 提交结果保存在 `runtime/submissions/`
-- 用户信息保存在 `runtime/users/users.json`
+- 用户信息保存在 MySQL
+- 提交结果、源码、测试点明细保存在 MySQL
 - 登录态使用 JWT
 - 密码使用 bcrypt 哈希
 - MySQL 访问通过简单连接池复用连接
@@ -38,7 +38,6 @@ cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
 
 当前还属于原型结构，后续可继续增强：
 
-- 接入数据库
 - 接入异步评测队列
 - 通过 HTTP / RPC 调度远程 worker
 - 增加管理员接口与题目录入接口

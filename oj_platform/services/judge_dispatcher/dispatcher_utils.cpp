@@ -3,6 +3,7 @@
 #include "common/protocol.hpp"
 
 #include <deque>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 
@@ -84,6 +85,36 @@ std::vector<oj::common::JudgeWorkerEndpoint> parse_worker_endpoints(const std::s
     if (endpoints.empty()) {
         endpoints.push_back(oj::common::JudgeWorkerEndpoint{});
     }
+    return endpoints;
+}
+
+std::vector<oj::common::JudgeWorkerEndpoint> parse_worker_endpoints_from_env() {
+    std::vector<oj::common::JudgeWorkerEndpoint> endpoints;
+
+    if (const char* combined = std::getenv("OJ_JUDGE_WORKERS"); combined != nullptr && *combined != '\0') {
+        endpoints = parse_worker_endpoints(combined);
+    }
+
+    std::string numbered;
+    for (int i = 1; i <= 3; ++i) {
+        const std::string env_name = "OJ_JUDGE_WORKER_" + std::to_string(i);
+        if (const char* value = std::getenv(env_name.c_str()); value != nullptr && *value != '\0') {
+            if (!numbered.empty()) {
+                numbered += ',';
+            }
+            numbered += value;
+        }
+    }
+
+    if (!numbered.empty()) {
+        const auto parsed = parse_worker_endpoints(numbered);
+        endpoints.insert(endpoints.end(), parsed.begin(), parsed.end());
+    }
+
+    if (endpoints.empty()) {
+        endpoints.push_back(oj::common::JudgeWorkerEndpoint{});
+    }
+
     return endpoints;
 }
 

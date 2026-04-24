@@ -4,6 +4,7 @@
 #include "common/platform_types.h"
 
 #include <cstddef>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,7 @@ void mark_submission_system_error(oj::common::SubmissionResult& record,
                                   const std::string& system_message);
 
 std::vector<oj::common::JudgeWorkerEndpoint> parse_worker_endpoints(const std::string& text);
+std::vector<oj::common::JudgeWorkerEndpoint> parse_worker_endpoints_from_env();
 
 class RoundRobinSelector {
 public:

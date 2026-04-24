@@ -1,12 +1,14 @@
 #include "services/judge_dispatcher/worker_client.h"
 
 #include "common/protocol_json.h"
+#include "services/judge_dispatcher/dispatcher_utils.h"
 #include <crow/json.h>
 
 #include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
 #include <netdb.h>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -142,6 +144,59 @@ oj::protocol::JudgeResponse WorkerClient::judge(const oj::protocol::JudgeRequest
     write_all(socket_handle.get(), http_request);
     const auto raw_response = read_all(socket_handle.get());
     return oj::common::deserialize_judge_response(extract_http_body(raw_response));
+}
+
+WorkerPool::WorkerPool(std::vector<oj::common::JudgeWorkerEndpoint> endpoints,
+                       std::chrono::milliseconds cooldown)
+    : cooldown_(cooldown) {
+    if (endpoints.empty()) {
+        endpoints.push_back(oj::common::JudgeWorkerEndpoint{});
+    }
+
+    workers_.reserve(endpoints.size());
+    for (const auto& endpoint : endpoints) {
+        workers_.push_back(WorkerState{endpoint, std::chrono::steady_clock::time_point{}});
+    }
+}
+
+oj::protocol::JudgeResponse WorkerPool::judge(const oj::protocol::JudgeRequest& request) {
+    if (workers_.empty()) {
+        throw std::runtime_error("no judge workers configured");
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    std::ostringstream errors;
+    bool first_error = true;
+
+    for (std::size_t attempt = 0; attempt < workers_.size(); ++attempt) {
+        const auto index = (next_index_ + attempt) % workers_.size();
+        auto& worker = workers_[index];
+        if (worker.unavailable_until > now) {
+            continue;
+        }
+
+        try {
+            WorkerClient client{worker.endpoint};
+            next_index_ = (index + 1) % workers_.size();
+            return client.judge(request);
+        } catch (const std::exception& ex) {
+            worker.unavailable_until = std::chrono::steady_clock::now() + cooldown_;
+            if (!first_error) {
+                errors << "; ";
+            }
+            first_error = false;
+            errors << worker.endpoint.host << ':' << worker.endpoint.port << " => " << ex.what();
+        }
+    }
+
+    if (first_error) {
+        throw std::runtime_error("all judge workers are temporarily unavailable");
+    }
+    throw std::runtime_error("all judge workers failed: " + errors.str());
+}
+
+std::size_t WorkerPool::size() const noexcept {
+    return workers_.size();
 }
 
 } // namespace oj::dispatcher
