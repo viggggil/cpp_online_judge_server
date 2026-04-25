@@ -82,6 +82,8 @@ services:
         condition: service_started
       judge_worker_2:
         condition: service_started
+      judge_worker_3:
+        condition: service_started
     environment:
       TZ: Asia/Shanghai
       OJ_MYSQL_HOST: mysql
@@ -93,6 +95,7 @@ services:
       OJ_REDIS_PORT: 6379
       OJ_JUDGE_WORKER_1: judge_worker_1:18081/api/judge
       OJ_JUDGE_WORKER_2: judge_worker_2:18081/api/judge
+      OJ_JUDGE_WORKER_3: judge_worker_3:18081/api/judge
 
   judge_worker_1:
     build:
@@ -111,6 +114,17 @@ services:
       dockerfile: Dockerfile
       target: judge_worker
     container_name: oj_platform_judge_worker_2
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      OJ_JUDGE_WORKER_PORT: 18081
+
+  judge_worker_3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: judge_worker
+    container_name: oj_platform_judge_worker_3
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai

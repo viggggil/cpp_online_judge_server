@@ -8,6 +8,7 @@
 - `problem.html/js`：题目详情页
 - `submit.html/js`：提交页
 - `submission.html/js`：提交结果页
+- `submissions.html/js`：提交记录列表页
 - `auth.js`：登录/注册弹窗与登录态管理
 - `styles.css`：公共样式
 

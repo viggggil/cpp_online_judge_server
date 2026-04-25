@@ -14,6 +14,7 @@
 - `judge_dispatcher`
 - `judge_worker_1`
 - `judge_worker_2`
+- `judge_worker_3`
 
 整体拓扑如下：
 
@@ -35,6 +36,7 @@ judge_dispatcher container
   v
 judge_worker_1 container
 judge_worker_2 container
+judge_worker_3 container
 
 oj_server / dispatcher
   |
@@ -75,8 +77,8 @@ docker compose down
 - judge_dispatcher
   - 容器名：`oj_platform_judge_dispatcher`
   - 负责消费 Redis 提交队列并调度 worker
-- judge_worker_1 / judge_worker_2
-  - 容器名：`oj_platform_judge_worker_1` / `oj_platform_judge_worker_2`
+- judge_worker_1 / judge_worker_2 / judge_worker_3
+  - 容器名：`oj_platform_judge_worker_1` / `oj_platform_judge_worker_2` / `oj_platform_judge_worker_3`
   - 仅在 compose 内网中被 dispatcher 调用
 
 ### 初始化说明
@@ -114,6 +116,7 @@ docker compose up -d --build
 - `OJ_REDIS_HOST=redis`
 - `OJ_JUDGE_WORKER_1=judge_worker_1:18081/api/judge`
 - `OJ_JUDGE_WORKER_2=judge_worker_2:18081/api/judge`
+- `OJ_JUDGE_WORKER_3=judge_worker_3:18081/api/judge`
 
 因此：
 
@@ -190,7 +193,7 @@ cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
 当前仓库已经不是只有目录骨架，而是具备了一个可以运行和演示的最小版本：
 
 - 使用 `Crow` 作为第三方 Web 框架
-- 拥有 `oj_server` 与 `judge_worker` 两个服务目标
+- 拥有 `oj_server`、`judge_dispatcher` 与 `judge_worker` 三个服务目标
 - 支持题目列表、题目详情、代码提交、提交结果查看
 - 支持基于 MySQL 的题目、题面与测试点读取
 - 支持用户注册 / 登录
@@ -199,9 +202,10 @@ cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
 - 前端页面支持登录弹窗、提交与结果展示
 - 提交结果页支持测试点折叠详情查看（默认只展示状态、耗时、内存）
 - 支持 Redis 提交队列、异步评测状态流转与轮询展示
+- 支持 dispatcher 通过 HTTP 调用多个 judge_worker，并按轮询顺序分发任务
 - MySQL 访问已封装为连接池
 
-> 说明：当前版本已把“提交入口”和“判题消费”拆成异步队列模型：`oj_server` 负责入队，`judge_dispatcher` 负责消费并调用本地判题核心；后续可以继续把 dispatcher 演进成真正的远程调度和多 worker 负载均衡架构。
+> 说明：当前版本已把“提交入口”和“判题消费”拆成异步队列模型：`oj_server` 负责入队，`judge_dispatcher` 负责消费 Redis 队列，并通过 HTTP 调用 compose 中配置的 3 个 `judge_worker`。dispatcher 维护 worker 列表下标，成功派发后递增，下次从下一个 worker 开始，实现 round-robin；worker 失败时会短暂冷却并尝试下一个可用 worker。
 
 ---
 
@@ -225,7 +229,7 @@ cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
 
 ### 当前仍属于原型 / 待增强
 
-- [ ] 远程 `judge_worker` HTTP 调度与真正负载均衡
+- [x] 远程 `judge_worker` HTTP 调度与 round-robin 分发
 - [ ] 多语言支持（当前主要按 C++17 路径组织）
 - [ ] 沙箱隔离进一步增强
 - [x] 数据库存储用户/提交/题目元数据
@@ -288,13 +292,15 @@ oj_platform/
 
 ### `judge_worker`
 
-目前已具备独立服务目标和基础路由骨架，便于后续改造成真实的远程判题节点。
+已具备独立服务目标和 HTTP 判题接口，dispatcher 会把 Redis 队列中的提交任务通过 `POST /api/judge` 派发给 worker。
 
 ### `judge_dispatcher`
 
 - 从 Redis List（默认 key：`oj:queue:submissions`）阻塞消费提交任务
 - 将提交状态从 `QUEUED` 更新为 `RUNNING`
-- 调用判题核心完成编译与测试点执行
+- 通过 HTTP 调用 `judge_worker` 完成编译与测试点执行
+- 支持从 `OJ_JUDGE_WORKERS` 或 `OJ_JUDGE_WORKER_1..3` 读取多个 worker，当前 compose 配置 3 个 worker
+- 使用 round-robin 顺序派发；若某个 worker 失败，会进入短暂冷却并尝试下一个可用 worker
 - 将状态更新为最终态，如 `OK / WRONG_ANSWER / TLE / SYSTEM_ERROR`
 
 ---
@@ -386,7 +392,7 @@ redis-server --port 6379
 /home/max85/webserver/oj_platform/build-auth-test/oj_server
 ```
 
-如果你要继续调试 `judge_worker` 的 HTTP 接口，也可以单独启动它。
+本地多 worker 调试时可在不同终端用不同端口启动 `judge_worker`，再设置 `OJ_JUDGE_WORKERS` 或 `OJ_JUDGE_WORKER_1..3` 后启动 `judge_dispatcher`。Docker Compose 默认已经配置 3 个 worker，通常推荐直接使用 `docker compose up -d --build`。
 
 ---
 
@@ -446,11 +452,11 @@ problems/1000/
 
 ## 下一步建议
 
-1. 把 `judge_dispatcher -> judge_worker` 的本地调用改为 HTTP / RPC 派发
-2. 增加多个 worker 的注册、心跳与调度策略
-3. 补充用户、题目、提交的数据持久化
-4. 接入管理员后台与题目录入工具
-5. 增加更多题目与更完整的特殊判题支持
+1. 增加 worker 注册、心跳、负载上报与自动摘除/恢复
+2. 在 round-robin 基础上补充最少连接、按负载等调度策略
+3. 接入管理员后台、题目录入后台与队列监控面板
+4. 增加更多题目与更完整的特殊判题支持
+5. 强化判题沙箱隔离与多语言运行时
 
 ---
 
@@ -459,7 +465,7 @@ problems/1000/
 如果你后面希望继续往“负载均衡在线判题系统”方向推进，我建议下一阶段优先做：
 
 1. worker 注册与心跳
-2. 任务队列
-3. 调度策略（轮询 / 最少连接 / 按负载）
-4. 提交异步化
+2. 负载监控与调度策略扩展（最少连接 / 按负载）
+3. 管理后台与题目录入工具
+4. 更完整的特殊判题与多语言支持
 5. 判题沙箱隔离强化
