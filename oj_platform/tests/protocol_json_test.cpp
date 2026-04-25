@@ -63,4 +63,21 @@ TEST(ProtocolJsonTest, JudgeResponseSerializeDeserializeRoundTrip) {
     EXPECT_EQ(parsed.test_case_results[1].error_message, "mismatch");
 }
 
+TEST(ProtocolJsonTest, JudgeResponseSupportsOutputLimitExceeded) {
+    oj::protocol::JudgeResponse response;
+    response.submission_id = 9001;
+    response.final_status = oj::protocol::JudgeStatus::output_limit_exceeded;
+    response.compile_success = true;
+    response.test_case_results = {
+        {oj::protocol::JudgeStatus::output_limit_exceeded, 100, 2048, "", std::string(32, 'a'), "", "too much output"},
+    };
+
+    const auto json = oj::common::serialize_judge_response(response);
+    const auto parsed = oj::common::deserialize_judge_response(json);
+
+    EXPECT_EQ(parsed.final_status, oj::protocol::JudgeStatus::output_limit_exceeded);
+    ASSERT_EQ(parsed.test_case_results.size(), 1u);
+    EXPECT_EQ(parsed.test_case_results[0].status, oj::protocol::JudgeStatus::output_limit_exceeded);
+}
+
 } // namespace

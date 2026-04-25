@@ -10,6 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <system_error>
 
 namespace oj::worker {
 
@@ -83,7 +84,9 @@ oj::protocol::JudgeResponse JudgeCore::judge(const oj::protocol::JudgeRequest& r
 
         for (const auto& test_case : effective_test_cases) {
             response.test_case_results.push_back(
-                run_single_testcase(compile_result.executable_path.string(),
+                run_single_testcase(compile_result.executable_path,
+                                    work_directory,
+                                    response.test_case_results.size(),
                                     test_case,
                                     request.time_limit_ms,
                                     request.memory_limit_mb));
@@ -104,16 +107,20 @@ oj::protocol::JudgeResponse JudgeCore::judge(const oj::protocol::JudgeRequest& r
 std::filesystem::path JudgeCore::prepare_work_directory(std::int64_t submission_id) const {
     auto work_directory = std::filesystem::path{"runtime"} / "judge_worker" /
                           ("submission_" + std::to_string(submission_id));
+    std::error_code ec;
+    std::filesystem::remove_all(work_directory, ec);
     std::filesystem::create_directories(work_directory);
     return work_directory;
 }
 
-oj::protocol::TestCaseResult JudgeCore::run_single_testcase(const std::string& executable_path,
+oj::protocol::TestCaseResult JudgeCore::run_single_testcase(const std::filesystem::path& executable_path,
+                                                            const std::filesystem::path& submission_work_directory,
+                                                            std::size_t case_index,
                                                             const oj::protocol::TestCase& test_case,
                                                             std::int32_t time_limit_ms,
                                                             std::int32_t memory_limit_mb) const {
     RunService run_service;
-    const auto run_work_directory = std::filesystem::path{"runtime"} / "judge_worker" / "runs";
+    const auto run_work_directory = submission_work_directory / ("testcase_" + std::to_string(case_index + 1));
     std::filesystem::create_directories(run_work_directory);
     const auto run_result = run_service.run(executable_path,
                                             test_case.input,

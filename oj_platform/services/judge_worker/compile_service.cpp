@@ -1,10 +1,17 @@
 #include "services/judge_worker/compile_service.h"
 
-#include <cstdlib>
+#include <cerrno>
+#include <csignal>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <fcntl.h>
 #include <sstream>
 #include <stdexcept>
+#include <sys/resource.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 namespace oj::worker {
 
@@ -37,6 +44,27 @@ std::string shell_escape(const std::filesystem::path& value) {
     return escaped;
 }
 
+bool write_text_file(const std::filesystem::path& file_path, const std::string& content) {
+    std::ofstream output(file_path, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!output) {
+        return false;
+    }
+    output << content;
+    return output.good();
+}
+
+int open_redirect_file(const std::filesystem::path& path) {
+    return ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+}
+
+void set_limit(int resource, rlim_t soft, rlim_t hard) {
+    struct rlimit limit {
+        soft,
+        hard,
+    };
+    (void)::setrlimit(resource, &limit);
+}
+
 } // namespace
 
 CompileResult CompileService::compile(const std::filesystem::path& work_directory,
@@ -52,16 +80,66 @@ CompileResult CompileService::compile(const std::filesystem::path& work_director
     const auto stderr_path = work_directory / "compile.stderr.log";
 
     {
-        std::ofstream output(result.source_path, std::ios::out | std::ios::binary | std::ios::trunc);
-        if (!output) {
+        if (!write_text_file(result.source_path, source_code)) {
             throw std::runtime_error("failed to open source file for writing: " + result.source_path.string());
         }
-        output << source_code;
     }
 
     result.command = build_compile_command(
         result.source_path, result.executable_path, language, stdout_path, stderr_path);
-    result.exit_code = std::system(result.command.c_str());
+
+    pid_t pid = ::fork();
+    if (pid < 0) {
+        throw std::runtime_error("fork failed for compiler process");
+    }
+
+    if (pid == 0) {
+        const int stdout_fd = open_redirect_file(stdout_path);
+        const int stderr_fd = open_redirect_file(stderr_path);
+        if (stdout_fd < 0 || stderr_fd < 0) {
+            _exit(127);
+        }
+
+        if (::dup2(stdout_fd, STDOUT_FILENO) < 0 || ::dup2(stderr_fd, STDERR_FILENO) < 0) {
+            _exit(127);
+        }
+        ::close(stdout_fd);
+        ::close(stderr_fd);
+
+        set_limit(RLIMIT_CPU, 10, 10);
+        set_limit(RLIMIT_AS, static_cast<rlim_t>(1024) * 1024 * 1024, static_cast<rlim_t>(1024) * 1024 * 1024);
+        set_limit(RLIMIT_FSIZE, static_cast<rlim_t>(64) * 1024 * 1024, static_cast<rlim_t>(64) * 1024 * 1024);
+        set_limit(RLIMIT_NPROC, 32, 32);
+        set_limit(RLIMIT_NOFILE, 64, 64);
+
+        if (language == "cpp") {
+            const std::string source = result.source_path.string();
+            const std::string executable = result.executable_path.string();
+            ::execlp("g++",
+                     "g++",
+                     "-std=c++17",
+                     "-O2",
+                     "-pipe",
+                     source.c_str(),
+                     "-o",
+                     executable.c_str(),
+                     static_cast<char*>(nullptr));
+        }
+        _exit(127);
+    }
+
+    int status = 0;
+    if (::waitpid(pid, &status, 0) < 0) {
+        throw std::runtime_error("waitpid failed for compiler process");
+    }
+
+    if (WIFEXITED(status)) {
+        result.exit_code = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        result.exit_code = 128 + WTERMSIG(status);
+    } else {
+        result.exit_code = -1;
+    }
     result.stdout_text = read_text_file(stdout_path);
     result.stderr_text = read_text_file(stderr_path);
     result.success = (result.exit_code == 0) && std::filesystem::exists(result.executable_path);

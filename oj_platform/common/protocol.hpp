@@ -16,6 +16,7 @@ enum class JudgeStatus : std::uint8_t {
     runtime_error,
     time_limit_exceeded,
     memory_limit_exceeded,
+    output_limit_exceeded,
     wrong_answer,
     presentation_error,
     system_error,
@@ -33,6 +34,8 @@ inline constexpr std::string_view to_string(JudgeStatus status) noexcept {
             return "TIME_LIMIT_EXCEEDED";
         case JudgeStatus::memory_limit_exceeded:
             return "MEMORY_LIMIT_EXCEEDED";
+        case JudgeStatus::output_limit_exceeded:
+            return "OUTPUT_LIMIT_EXCEEDED";
         case JudgeStatus::wrong_answer:
             return "WRONG_ANSWER";
         case JudgeStatus::presentation_error:

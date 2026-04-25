@@ -15,6 +15,7 @@ oj::protocol::JudgeStatus parse_judge_status(const std::string& text) {
     if (text == "RUNTIME_ERROR") return oj::protocol::JudgeStatus::runtime_error;
     if (text == "TIME_LIMIT_EXCEEDED") return oj::protocol::JudgeStatus::time_limit_exceeded;
     if (text == "MEMORY_LIMIT_EXCEEDED") return oj::protocol::JudgeStatus::memory_limit_exceeded;
+    if (text == "OUTPUT_LIMIT_EXCEEDED") return oj::protocol::JudgeStatus::output_limit_exceeded;
     if (text == "WRONG_ANSWER") return oj::protocol::JudgeStatus::wrong_answer;
     if (text == "PRESENTATION_ERROR") return oj::protocol::JudgeStatus::presentation_error;
     return oj::protocol::JudgeStatus::system_error;
