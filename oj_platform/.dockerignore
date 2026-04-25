@@ -1,0 +1,14 @@
+build/
+.git/
+.cache/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.o
+*.a
+*.so
+*.so.*
+*.log
+Dockerfile
+docker-compose.yml

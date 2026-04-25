@@ -4,17 +4,33 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    ca-certificates \
     cmake \
+    git \
     pkg-config \
     libssl-dev \
     libcrypt-dev \
     libhiredis-dev \
-    libredis++-dev \
+    libasio-dev \
     libmysqlcppconn-dev \
     && rm -rf /var/lib/apt/lists/*
 
+RUN git clone --depth 1 https://github.com/sewenew/redis-plus-plus.git /tmp/redis-plus-plus \
+    && cmake -S /tmp/redis-plus-plus -B /tmp/redis-plus-plus/build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DREDIS_PLUS_PLUS_BUILD_TEST=OFF \
+        -DREDIS_PLUS_PLUS_BUILD_STATIC=OFF \
+        -DREDIS_PLUS_PLUS_BUILD_SHARED=ON \
+    && cmake --build /tmp/redis-plus-plus/build -j"$(nproc)" \
+    && cmake --install /tmp/redis-plus-plus/build \
+    && ldconfig \
+    && rm -rf /tmp/redis-plus-plus
+
 WORKDIR /src
 COPY . /src
+
+RUN rm -rf /src/third_party/crow \
+    && git clone --depth 1 https://github.com/CrowCpp/Crow.git /src/third_party/crow
 
 RUN cmake -S /src -B /src/build -DCMAKE_BUILD_TYPE=Release \
     && cmake --build /src/build -j"$(nproc)"
@@ -27,10 +43,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 \
     libcrypt1 \
     libhiredis1.1.0 \
-    libredis++1 \
-    libmysqlcppconn7v5 \
+    libmysqlcppconn7t64 \
     g++ \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local/lib/libredis++.so* /usr/local/lib/
+RUN ldconfig
 
 WORKDIR /app
 
