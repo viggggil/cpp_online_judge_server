@@ -4,15 +4,50 @@
 
 ## MySQL 接入说明
 
-## Docker Compose（MySQL + Redis）
+## Docker Compose（完整容器化部署）
 
-当前已经补充 `docker-compose.yml`，先把 **MySQL** 和 **Redis** 以容器方式运行起来，后续如果要把 `oj_server`、`judge_dispatcher`、`judge_worker` 也一起容器化，可以继续在这个 compose 文件上扩展。
+当前仓库已经补充完整容器编排，可直接启动：
 
-### 启动数据库与缓存
+- `mysql`
+- `redis`
+- `oj_server`
+- `judge_dispatcher`
+- `judge_worker_1`
+- `judge_worker_2`
+
+整体拓扑如下：
+
+```text
+Browser
+  |
+  | http://localhost:8080
+  v
+oj_server container
+  |
+  | Redis queue
+  v
+redis container
+  ^
+  |
+judge_dispatcher container
+  |
+  | HTTP /api/judge
+  v
+judge_worker_1 container
+judge_worker_2 container
+
+oj_server / dispatcher
+  |
+  | MySQL
+  v
+mysql container
+```
+
+### 启动全部服务
 
 ```bash
 cd /home/max85/webserver/oj_platform
-docker compose up -d mysql redis
+docker compose up -d --build
 ```
 
 ### 停止服务
@@ -34,6 +69,15 @@ docker compose down
 - Redis
   - 容器名：`oj_platform_redis`
   - 端口映射：`6379:6379`
+- oj_server
+  - 容器名：`oj_platform_oj_server`
+  - 宿主机访问地址：`http://127.0.0.1:8080`
+- judge_dispatcher
+  - 容器名：`oj_platform_judge_dispatcher`
+  - 负责消费 Redis 提交队列并调度 worker
+- judge_worker_1 / judge_worker_2
+  - 容器名：`oj_platform_judge_worker_1` / `oj_platform_judge_worker_2`
+  - 仅在 compose 内网中被 dispatcher 调用
 
 ### 初始化说明
 
@@ -44,19 +88,37 @@ docker compose down
 ```bash
 cd /home/max85/webserver/oj_platform
 docker compose down -v
-docker compose up -d mysql redis
+docker compose up -d --build
 ```
 
-### 与当前代码默认配置的关系
+### Dockerfile 说明
 
-当前 `common/platform_config.h` 中默认连接地址仍然是：
+根目录新增了多阶段 `Dockerfile`，包含 3 个 target：
+
+- `oj_server`
+- `judge_dispatcher`
+- `judge_worker`
+
+`docker-compose.yml` 会基于同一个 Dockerfile 分别构建不同服务镜像。
+
+### 与当前代码配置的关系
+
+当前 `common/platform_config.h` 已支持从环境变量读取容器内连接配置，未设置时仍保留本地开发默认值：
 
 - MySQL：`127.0.0.1:3306`
 - Redis：`127.0.0.1:6379`
 
-因为 compose 已经把容器端口映射到宿主机，所以 **当前直接在宿主机运行 `oj_server` / `judge_dispatcher` 时，无需改代码配置**。
+容器内实际使用的是 compose 服务名：
 
-> 如果后续把 `oj_server` 等服务也一起放入 Docker 容器，则建议把连接地址改为 compose 服务名（如 `mysql`、`redis`），并进一步把配置改造成环境变量读取方式。
+- `OJ_MYSQL_HOST=mysql`
+- `OJ_REDIS_HOST=redis`
+- `OJ_JUDGE_WORKER_1=judge_worker_1:18081/api/judge`
+- `OJ_JUDGE_WORKER_2=judge_worker_2:18081/api/judge`
+
+因此：
+
+- 在宿主机直接运行服务时，仍可继续使用默认配置
+- 在容器内运行时，会自动切换到容器网络地址
 
 当前版本已将以下数据源切换为 MySQL：
 

@@ -42,6 +42,81 @@ services:
       timeout: 5s
       retries: 12
 
+  oj_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: oj_server
+    container_name: oj_platform_oj_server
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      OJ_SERVER_PORT: 18080
+      OJ_MYSQL_HOST: mysql
+      OJ_MYSQL_PORT: 3306
+      OJ_MYSQL_USER: oj
+      OJ_MYSQL_PASSWORD: oj123456
+      OJ_MYSQL_DATABASE: oj_platform
+      OJ_REDIS_HOST: redis
+      OJ_REDIS_PORT: 6379
+    ports:
+      - "8080:18080"
+
+  judge_dispatcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: judge_dispatcher
+    container_name: oj_platform_judge_dispatcher
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      judge_worker_1:
+        condition: service_started
+      judge_worker_2:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      OJ_MYSQL_HOST: mysql
+      OJ_MYSQL_PORT: 3306
+      OJ_MYSQL_USER: oj
+      OJ_MYSQL_PASSWORD: oj123456
+      OJ_MYSQL_DATABASE: oj_platform
+      OJ_REDIS_HOST: redis
+      OJ_REDIS_PORT: 6379
+      OJ_JUDGE_WORKER_1: judge_worker_1:18081/api/judge
+      OJ_JUDGE_WORKER_2: judge_worker_2:18081/api/judge
+
+  judge_worker_1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: judge_worker
+    container_name: oj_platform_judge_worker_1
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      OJ_JUDGE_WORKER_PORT: 18081
+
+  judge_worker_2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: judge_worker
+    container_name: oj_platform_judge_worker_2
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      OJ_JUDGE_WORKER_PORT: 18081
+
 volumes:
   mysql_data:
   redis_data:

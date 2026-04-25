@@ -1,6 +1,27 @@
 #pragma once
 
+#include <cstdlib>
+#include <string>
+
 namespace oj::common {
+
+inline const char* env_or_default(const char* env_name, const char* default_value) {
+    if (const char* value = std::getenv(env_name); value != nullptr && *value != '\0') {
+        return value;
+    }
+    return default_value;
+}
+
+inline int env_int_or_default(const char* env_name, int default_value) {
+    if (const char* value = std::getenv(env_name); value != nullptr && *value != '\0') {
+        try {
+            return std::stoi(value);
+        } catch (...) {
+            return default_value;
+        }
+    }
+    return default_value;
+}
 
 struct ServiceConfig {
     int port{};
@@ -8,22 +29,22 @@ struct ServiceConfig {
 };
 
 struct RedisConfig {
-    const char* host{"127.0.0.1"};
-    int port{6379};
-    int db{0};
-    const char* password{""};
-    int socket_timeout_ms{5000};
-    long long problem_list_ttl_seconds{60};
-    const char* submission_queue_key{"oj:queue:submissions"};
+    const char* host{env_or_default("OJ_REDIS_HOST", "127.0.0.1")};
+    int port{env_int_or_default("OJ_REDIS_PORT", 6379)};
+    int db{env_int_or_default("OJ_REDIS_DB", 0)};
+    const char* password{env_or_default("OJ_REDIS_PASSWORD", "")};
+    int socket_timeout_ms{env_int_or_default("OJ_REDIS_TIMEOUT_MS", 5000)};
+    long long problem_list_ttl_seconds{env_int_or_default("OJ_PROBLEM_LIST_TTL_SECONDS", 60)};
+    const char* submission_queue_key{env_or_default("OJ_SUBMISSION_QUEUE_KEY", "oj:queue:submissions")};
 };
 
 struct MySqlConfig {
-    const char* host{"127.0.0.1"};
-    int port{3306};
-    const char* username{"oj"};
-    const char* password{"oj123456"};
-    const char* database{"oj_platform"};
-    const char* charset{"utf8mb4"};
+    const char* host{env_or_default("OJ_MYSQL_HOST", "127.0.0.1")};
+    int port{env_int_or_default("OJ_MYSQL_PORT", 3306)};
+    const char* username{env_or_default("OJ_MYSQL_USER", "oj")};
+    const char* password{env_or_default("OJ_MYSQL_PASSWORD", "oj123456")};
+    const char* database{env_or_default("OJ_MYSQL_DATABASE", "oj_platform")};
+    const char* charset{env_or_default("OJ_MYSQL_CHARSET", "utf8mb4")};
     bool auto_reconnect{true};
 };
 
