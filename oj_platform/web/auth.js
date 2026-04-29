@@ -16,6 +16,23 @@
     localStorage.setItem(USERNAME_KEY, username);
   }
 
+  function isAdminRegisterMode(mode) {
+    return mode === 'admin-register';
+  }
+
+  function isRegisterMode(mode) {
+    return mode === 'register' || isAdminRegisterMode(mode);
+  }
+
+  function getAuthSubmitLabel(mode) {
+    if (isAdminRegisterMode(mode)) return '管理员注册';
+    return mode === 'register' ? '注册' : '登录';
+  }
+
+  function getAuthToggleLabel(mode) {
+    return isRegisterMode(mode) ? '切换到登录' : '切换到普通注册';
+  }
+
   function clearSession() {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(USERNAME_KEY);
@@ -107,9 +124,14 @@
         <input id="auth-username" class="input" placeholder="请输入用户名" />
         <label class="label" for="auth-password">密码</label>
         <input id="auth-password" type="password" class="input" placeholder="请输入密码" />
+        <div id="auth-admin-code-group" class="hidden">
+          <label class="label" for="auth-admin-code">管理员注册码</label>
+          <input id="auth-admin-code" class="input" placeholder="请输入管理员注册码" />
+        </div>
         <div class="actions auth-actions-row">
           <button id="auth-submit-btn" class="button">登录</button>
           <button id="auth-toggle-btn" class="button auth-btn-secondary">切换到注册</button>
+          <button id="auth-admin-btn" class="button auth-btn-secondary">管理员注册</button>
         </div>
         <pre id="auth-message" class="notice"></pre>
       </div>
@@ -120,9 +142,10 @@
     document.getElementById('auth-close-btn').addEventListener('click', closeAuthModal);
     modal.querySelector('.auth-modal-mask').addEventListener('click', closeAuthModal);
     document.getElementById('auth-toggle-btn').addEventListener('click', () => {
-      const nextMode = modal.dataset.mode === 'register' ? 'login' : 'register';
+      const nextMode = isRegisterMode(modal.dataset.mode) ? 'login' : 'register';
       openAuthModal(nextMode);
     });
+    document.getElementById('auth-admin-btn').addEventListener('click', () => openAuthModal('admin-register'));
     document.getElementById('auth-submit-btn').addEventListener('click', submitAuth);
     document.getElementById('auth-logout-btn').addEventListener('click', () => {
       clearSession();
@@ -151,12 +174,16 @@
   function openAuthModal(mode = 'login', message = '') {
     ensureAuthShell();
     const modal = document.getElementById('auth-modal');
+    const adminCodeGroup = document.getElementById('auth-admin-code-group');
+    const adminBtn = document.getElementById('auth-admin-btn');
     modal.classList.remove('hidden');
     modal.dataset.mode = mode;
-    document.getElementById('auth-title').textContent = mode === 'register' ? '注册' : '登录';
-    document.getElementById('auth-submit-btn').textContent = mode === 'register' ? '注册' : '登录';
-    document.getElementById('auth-toggle-btn').textContent = mode === 'register' ? '切换到登录' : '切换到注册';
+    document.getElementById('auth-title').textContent = getAuthSubmitLabel(mode);
+    document.getElementById('auth-submit-btn').textContent = getAuthSubmitLabel(mode);
+    document.getElementById('auth-toggle-btn').textContent = getAuthToggleLabel(mode);
     document.getElementById('auth-message').textContent = message;
+    adminCodeGroup.classList.toggle('hidden', !isAdminRegisterMode(mode));
+    adminBtn.style.display = mode === 'login' ? 'inline-block' : 'none';
   }
 
   function closeAuthModal() {
@@ -169,13 +196,20 @@
     const mode = modal.dataset.mode || 'login';
     const username = document.getElementById('auth-username').value.trim();
     const password = document.getElementById('auth-password').value;
+    const adminCode = document.getElementById('auth-admin-code').value.trim();
     const message = document.getElementById('auth-message');
 
-    message.textContent = mode === 'register' ? '注册中...' : '登录中...';
-    const response = await fetch(`/api/auth/${mode}`, {
+    const endpoint = isAdminRegisterMode(mode) ? '/api/auth/admin/register' : `/api/auth/${mode}`;
+    const payload = { username, password };
+    if (isAdminRegisterMode(mode)) {
+      payload.admin_code = adminCode;
+    }
+
+    message.textContent = isRegisterMode(mode) ? '注册中...' : '登录中...';
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify(payload)
     });
 
     const data = await response.json();
@@ -185,7 +219,7 @@
 
     setSession(data.token, data.username);
     updateAuthUI();
-    message.textContent = mode === 'register' ? '注册成功' : '登录成功';
+    message.textContent = isRegisterMode(mode) ? '注册成功' : '登录成功';
     setTimeout(closeAuthModal, 300);
   }
 

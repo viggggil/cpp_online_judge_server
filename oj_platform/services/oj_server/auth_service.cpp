@@ -1,5 +1,7 @@
 #include "services/oj_server/auth_service.h"
 
+#include "common/platform_config.h"
+
 #include <crow.h>
 #include <crow/utility.h>
 
@@ -24,6 +26,7 @@ namespace {
 struct UserRecord {
     std::string username;
     std::string password_hash;
+    std::string role{"user"};
     std::int64_t created_at{0};
 };
 
@@ -53,6 +56,10 @@ std::string base64url_decode(std::string encoded) {
 
 std::string jwt_secret() {
     return "oj_platform_demo_jwt_secret_change_me";
+}
+
+std::string admin_registration_code() {
+    return oj::common::env_or_default("OJ_ADMIN_REGISTER_CODE", "");
 }
 
 std::string bcrypt_salt() {
@@ -109,7 +116,7 @@ void validate_password(const std::string& password) {
 std::optional<UserRecord> find_user(sql::Connection& connection, const std::string& username) {
     auto statement = std::unique_ptr<sql::PreparedStatement>{
         connection.prepareStatement(
-            "SELECT username, password_hash, created_at FROM users WHERE username = ?")};
+            "SELECT username, password_hash, role, created_at FROM users WHERE username = ?")};
     statement->setString(1, username);
     auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
     if (!result->next()) {
@@ -118,6 +125,7 @@ std::optional<UserRecord> find_user(sql::Connection& connection, const std::stri
 
     UserRecord user;
     user.username = result->getString("username");
+    user.role = result->getString("role");
     user.password_hash = result->getString("password_hash");
     user.created_at = result->getInt64("created_at");
     return user;
@@ -133,7 +141,7 @@ std::string hmac_sha256(const std::string& data, const std::string& secret) {
     return std::string(reinterpret_cast<char*>(digest), digest_length);
 }
 
-std::string create_token(const std::string& username) {
+std::string create_token(const std::string& username, const std::string& role){
     crow::json::wvalue header;
     header["alg"] = "HS256";
     header["typ"] = "JWT";
@@ -142,6 +150,7 @@ std::string create_token(const std::string& username) {
     payload["sub"] = username;
     payload["iat"] = unix_now();
     payload["exp"] = unix_now() + 24 * 60 * 60;
+    payload["role"] = role;
 
     const auto encoded_header = base64url_encode(header.dump());
     const auto encoded_payload = base64url_encode(payload.dump());
@@ -179,7 +188,11 @@ std::optional<AuthenticatedUser> parse_token(const std::string& token) {
         return std::nullopt;
     }
 
-    return AuthenticatedUser{std::string{payload["sub"].s()}};
+    std::string role = "user";
+    if (payload.has("role")) {
+        role = std::string{payload["role"].s()};
+    }
+    return AuthenticatedUser{std::string{payload["sub"].s()}, role};
 }
 
 } // namespace
@@ -201,12 +214,43 @@ std::string AuthService::register_user(const std::string& username, const std::s
 
     auto statement = std::unique_ptr<sql::PreparedStatement>{
         connection->prepareStatement(
-            "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)")};
+            "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)")};
     statement->setString(1, username);
     statement->setString(2, bcrypt_hash(password));
-    statement->setInt64(3, unix_now());
+    statement->setString(3, "user");
+    statement->setInt64(4, unix_now());
     statement->executeUpdate();
-    return create_token(username);
+    return create_token(username, "user");
+}
+
+std::string AuthService::register_admin(const std::string& username,
+                                       const std::string& password,
+                                       const std::string& admin_code) const {
+    validate_username(username);
+    validate_password(password);
+
+    const auto configured_admin_code = admin_registration_code();
+    if (configured_admin_code.empty()) {
+        throw std::runtime_error("admin registration is disabled");
+    }
+    if (admin_code != configured_admin_code) {
+        throw std::runtime_error("invalid admin code");
+    }
+
+    auto connection = mysql_client_.create_connection();
+    if (find_user(*connection, username)) {
+        throw std::runtime_error("username already exists");
+    }
+
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)")};
+    statement->setString(1, username);
+    statement->setString(2, bcrypt_hash(password));
+    statement->setString(3, "admin");
+    statement->setInt64(4, unix_now());
+    statement->executeUpdate();
+    return create_token(username, "admin");
 }
 
 std::string AuthService::login_user(const std::string& username, const std::string& password) const {
@@ -219,7 +263,7 @@ std::string AuthService::login_user(const std::string& username, const std::stri
         throw std::runtime_error("invalid username or password");
     }
 
-    return create_token(username);
+    return create_token(user->username, user->role);
 }
 
 std::optional<AuthenticatedUser> AuthService::verify_token(const std::string& token) const {

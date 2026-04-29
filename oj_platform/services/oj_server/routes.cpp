@@ -34,17 +34,32 @@ std::optional<AuthenticatedUser> require_user(const crow::request& req) {
     return auth_service.verify_token(extract_bearer_token(req));
 }
 
+std::optional<AuthenticatedUser> require_admin(const crow::request& req) {
+  auto user = require_user(req);
+  if (!user) {
+    return std::nullopt;
+  }
+  if (!user->is_admin()) {
+    return std::nullopt;
+  }
+  return user;
+}
+
 crow::response json_error(int code, const std::string& message) {
     crow::json::wvalue body;
     body["error"] = message;
     return crow::response{code, body};
 }
 
-crow::json::wvalue make_auth_json(const std::string& token, const std::string& username) {
-    crow::json::wvalue body;
-    body["token"] = token;
-    body["username"] = username;
-    return body;
+crow::json::wvalue make_auth_json(const std::string& token,
+                                  const std::string& username,
+                                  const std::string& role) {
+  crow::json::wvalue body;
+  body["token"] = token;
+  body["username"] = username;
+  body["role"] = role;
+  body["is_admin"] = role == "admin";
+  return body;
 }
 
 std::filesystem::path resolve_web_path(const std::filesystem::path& relative_path) {
@@ -255,7 +270,28 @@ void register_routes(crow::Crow<>& app) {
             const std::string password = json["password"].s();
             AuthService auth_service;
             const auto token = auth_service.register_user(username, password);
-            return crow::response{200, make_auth_json(token, username)};
+            return crow::response{200, make_auth_json(token, username, "user")};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+
+    CROW_ROUTE(app, "/api/auth/admin/register").methods(crow::HTTPMethod::POST)([](const crow::request& req) {
+        const auto json = crow::json::load(req.body);
+        if (!json || !json.has("username") || !json.has("password") ||
+            !json.has("admin_code")) {
+            return json_error(400, "username, password and admin_code are required");
+        }
+
+        try {
+            const std::string username = json["username"].s();
+            const std::string password = json["password"].s();
+            const std::string admin_code = json["admin_code"].s();
+
+            AuthService auth_service;
+            const auto token = auth_service.register_admin(username, password, admin_code);
+
+            return crow::response{200, make_auth_json(token, username, "admin")};
         } catch (const std::exception& ex) {
             return json_error(400, ex.what());
         }
@@ -272,7 +308,9 @@ void register_routes(crow::Crow<>& app) {
             const std::string password = json["password"].s();
             AuthService auth_service;
             const auto token = auth_service.login_user(username, password);
-            return crow::response{200, make_auth_json(token, username)};
+            const auto authenticated_user = auth_service.verify_token(token);
+            const auto role = authenticated_user ? authenticated_user->role : "user";
+            return crow::response{200, make_auth_json(token, username, role)};
         } catch (const std::exception& ex) {
             return json_error(401, ex.what());
         }
@@ -286,6 +324,8 @@ void register_routes(crow::Crow<>& app) {
 
         crow::json::wvalue body;
         body["username"] = user->username;
+        body["role"] = user->role;
+        body["is_admin"] = user->is_admin();
         return crow::response{200, body};
     });
 
