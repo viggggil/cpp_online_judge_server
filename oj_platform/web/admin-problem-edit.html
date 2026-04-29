@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>编辑题面</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <a id="back-to-problem" class="back-link" href="/">← 返回题目详情</a>
+    <div class="card">
+      <div class="page-header-row">
+        <div>
+          <h1 id="page-title">编辑题面</h1>
+          <div id="page-subtitle" class="meta">加载中...</div>
+        </div>
+      </div>
+
+      <div class="editor-layout">
+        <section class="editor-panel">
+          <h2>Markdown 源文本</h2>
+          <textarea id="statement-editor" class="input code editor-textarea" placeholder="请输入 Markdown 题面内容"></textarea>
+        </section>
+
+        <section class="editor-panel">
+          <h2>实时预览</h2>
+          <div id="statement-preview" class="statement preview-panel"></div>
+        </section>
+      </div>
+
+      <div class="actions">
+        <button id="save-btn" class="button" type="button">保存</button>
+        <button id="cancel-btn" class="button auth-btn-secondary" type="button">取消</button>
+      </div>
+
+      <pre id="status-message" class="notice status-message"></pre>
+    </div>
+  </div>
+  <script src="/web/auth.js"></script>
+  <script src="/web/admin-problem-edit.js"></script>
+</body>
+</html>

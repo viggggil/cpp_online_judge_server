@@ -387,6 +387,66 @@ void register_routes(crow::Crow<>& app) {
         }
         return crow::response{200, make_submission_json(*result)};
     });
+
+    CROW_ROUTE(app, "/api/admin/problems/<int>/statement").methods(crow::HTTPMethod::GET)([](const crow::request& req, std::int64_t problem_id) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        try {
+            const std::string language = "zh-CN";
+            ProblemRepository repository;
+            const auto statement = repository.find_statement_markdown(problem_id, language);
+            if (!statement) {
+                return json_error(404, "problem statement not found");
+            }
+            crow::json::wvalue body;
+            body["problem_id"] = problem_id;
+            body["language"] = language;
+            body["statement_markdown"] = *statement;
+            return crow::response{200, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+
+    CROW_ROUTE(app, "/api/admin/problems/<int>/statement").methods(crow::HTTPMethod::PUT)([](const crow::request& req, std::int64_t problem_id) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        const auto json = crow::json::load(req.body);
+        if (!json || !json.has("statement_markdown")) {
+            return json_error(400, "statement_markdown is required");
+        }
+
+        try {
+            const std::string language =
+                json.has("language") ? std::string{json["language"].s()} : "zh-CN";
+
+            const std::string statement_markdown = json["statement_markdown"].s();
+
+            if (statement_markdown.empty()) {
+                return json_error(400, "statement_markdown cannot be empty");
+            }
+
+            if (statement_markdown.size() > 1024 * 1024) {
+                return json_error(400, "statement_markdown is too large");
+            }
+            ProblemRepository repository;
+            repository.update_statement_markdown(problem_id, language, statement_markdown);
+            crow::json::wvalue body;
+            body["ok"] = true;
+            body["problem_id"] = problem_id;
+            body["language"] = language;
+            return crow::response{200, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+
 }
 
 } // namespace oj::server

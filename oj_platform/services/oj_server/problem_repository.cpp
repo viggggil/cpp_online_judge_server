@@ -36,6 +36,16 @@ std::vector<std::string> load_problem_tags(sql::Connection& connection, std::int
     return tags;
 }
 
+bool problem_exists(sql::Connection& connection, std::int64_t problem_id) {
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection.prepareStatement("SELECT id FROM problems WHERE id = ?")
+    };
+    statement->setInt64(1, problem_id);
+
+    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+    return result->next();
+}
+
 } // namespace
 
 ProblemRepository::ProblemRepository()
@@ -128,6 +138,59 @@ std::vector<oj::protocol::TestCase> ProblemRepository::load_test_cases(std::int6
     }
     return test_cases;
 }
+
+std::optional<std::string> ProblemRepository::find_statement_markdown(
+    std::int64_t problem_id,
+    const std::string& language) const {
+    auto connection = mysql_client_.create_connection();
+
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "SELECT statement_markdown "
+            "FROM problem_statements "
+            "WHERE problem_id = ? AND language = ?")
+    };
+
+    statement->setInt64(1, problem_id);
+    statement->setString(2, language);
+
+    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+    if (!result->next()) {
+        return std::nullopt;
+    }
+
+    if (result->isNull("statement_markdown")) {
+        return std::string{};
+    }
+
+    return static_cast<std::string>(result->getString("statement_markdown"));
+}
+
+void ProblemRepository::update_statement_markdown(
+    std::int64_t problem_id,
+    const std::string& language,
+    const std::string& statement_markdown) const {
+    auto connection = mysql_client_.create_connection();
+
+    if (!problem_exists(*connection, problem_id)) {
+        throw std::runtime_error("problem not found");
+    }
+
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "INSERT INTO problem_statements "
+            "(problem_id, language, statement_markdown) "
+            "VALUES (?, ?, ?) "
+            "ON DUPLICATE KEY UPDATE "
+            "statement_markdown = VALUES(statement_markdown)")
+    };
+
+    statement->setInt64(1, problem_id);
+    statement->setString(2, language);
+    statement->setString(3, statement_markdown);
+    statement->executeUpdate();
+}
+
 
 } // namespace oj::server
 

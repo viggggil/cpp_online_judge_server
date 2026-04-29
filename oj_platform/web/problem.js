@@ -3,13 +3,39 @@ function problemIdFromPath() {
   return parts[1];
 }
 
+async function fetchCurrentUser() {
+  const response = await window.ojAuth.authFetch('/api/auth/me');
+  if (!response.ok) {
+    throw new Error('获取用户信息失败');
+  }
+  return response.json();
+}
+
+function bindEditButton(problemId, currentUser) {
+  const editButton = document.getElementById('edit-problem-btn');
+  if (!editButton) return;
+
+  editButton.classList.remove('hidden');
+  editButton.addEventListener('click', () => {
+    if (!currentUser || !currentUser.is_admin) {
+      alert('权限不足，仅管理员可以编辑题面');
+      return;
+    }
+    window.location.href = `/web/admin-problem-edit.html?problem_id=${encodeURIComponent(problemId)}`;
+  });
+}
+
 async function loadProblem() {
   await window.ojAuth.initAuth();
   if (!window.ojAuth.protectPage()) {
     return;
   }
   const id = problemIdFromPath();
-  const response = await window.ojAuth.authFetch(`/api/problems/${id}`);
+  const [problemResponse, currentUser] = await Promise.all([
+    window.ojAuth.authFetch(`/api/problems/${id}`),
+    fetchCurrentUser().catch(() => null),
+  ]);
+  const response = problemResponse;
   if (!response.ok) throw new Error('题目不存在');
   const problem = await response.json();
 
@@ -17,6 +43,7 @@ async function loadProblem() {
   document.getElementById('meta').textContent = `时间限制: ${problem.time_limit_ms} ms\n内存限制: ${problem.memory_limit_mb} MB\n标签: ${(problem.tags || []).join(', ')}`;
   document.getElementById('statement').textContent = problem.statement || '';
   document.getElementById('submit-link').href = `/submit/${problem.id}`;
+  bindEditButton(problem.id, currentUser);
 
   const samples = document.getElementById('samples');
   samples.innerHTML = '<h2>样例</h2>';
