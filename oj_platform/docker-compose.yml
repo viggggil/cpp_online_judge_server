@@ -59,6 +59,7 @@ services:
       OJ_MYSQL_DATABASE: oj_platform
       OJ_REDIS_HOST: redis
       OJ_REDIS_PORT: 6379
+      OJ_ADMIN_REGISTER_CODE: admin123456
     ports:
       - "8080:18080"
 

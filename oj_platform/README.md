@@ -49,8 +49,16 @@ mysql container
 
 ```bash
 cd /home/max85/webserver/oj_platform
-docker compose up -d --build
+./compose-up.sh
 ```
+
+如果你的环境里安装的是旧版 `docker-compose`（例如 1.29.x）并且 Docker Engine 较新，直接执行 `docker-compose up` 可能会报：
+
+```text
+KeyError: 'ContainerConfig'
+```
+
+这是旧版 `docker-compose` 在“重建已存在容器”时的兼容性问题。仓库里新增的 `./compose-up.sh` 会先清理本项目的旧容器，再执行 `docker-compose up -d --build`，可绕过这个问题。
 
 ### 停止服务
 
