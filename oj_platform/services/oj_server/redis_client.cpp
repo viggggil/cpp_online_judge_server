@@ -110,4 +110,17 @@ std::optional<std::string> RedisClient::blpop(const std::string& key, long long 
     }
 }
 
+bool RedisClient::del(const std::string& key) const {
+    if (!available()) {
+        return false;
+    }
+
+    try {
+        impl_->redis->del(key);
+        return true;
+    } catch (const sw::redis::Error&) {
+        return false;
+    }
+}
+
 } // namespace oj::server

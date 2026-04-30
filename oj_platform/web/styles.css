@@ -243,7 +243,45 @@ body {
   margin-top: 12px;
 }
 
+.admin-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.admin-tool-card {
+  margin-bottom: 0;
+}
+
+.admin-tool-card h2 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  font-size: 20px;
+}
+
+.compact-actions {
+  margin-top: 12px;
+}
+
+.admin-tool-danger {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.danger-button {
+  background: #dc2626;
+}
+
+.danger-button:hover {
+  background: #b91c1c;
+}
+
 @media (max-width: 900px) {
+  .admin-tools-grid {
+    grid-template-columns: 1fr;
+  }
+
   .editor-layout {
     grid-template-columns: 1fr;
   }

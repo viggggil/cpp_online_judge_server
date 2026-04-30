@@ -26,6 +26,7 @@ public:
     bool setex(const std::string& key, long long ttl_seconds, const std::string& value) const;
     bool rpush(const std::string& key, const std::string& value) const;
     std::optional<std::string> blpop(const std::string& key, long long timeout_seconds) const;
+    bool del(const std::string& key) const;
 
 private:
     struct Impl;

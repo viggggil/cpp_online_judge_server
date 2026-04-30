@@ -18,6 +18,6 @@ else
 fi
 
 echo "[oj_platform] 重新构建并启动服务..."
-docker-compose up -d --build "$@"
+docker compose up -d --build "$@"
 
-echo "[oj_platform] 启动命令已执行，可使用 docker-compose ps 查看状态"
+echo "[oj_platform] 启动命令已执行，可使用 docker compose ps 查看状态"

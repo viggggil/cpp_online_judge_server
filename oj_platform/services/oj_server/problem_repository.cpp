@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <ctime>
 #include <optional>
 #include <stdexcept>
 
@@ -53,6 +54,59 @@ ProblemRepository::ProblemRepository()
 
 ProblemRepository::ProblemRepository(MySqlClient mysql_client)
     : mysql_client_(std::move(mysql_client)) {}
+
+void ProblemRepository::update_problem_id(std::int64_t old_problem_id, std::int64_t new_problem_id) const {
+    if (old_problem_id <= 0 || new_problem_id <= 0) {
+        throw std::runtime_error("problem id must be positive");
+    }
+    if (old_problem_id == new_problem_id) {
+        return;
+    }
+
+    auto connection = mysql_client_.create_connection();
+    if (!problem_exists(*connection, old_problem_id)) {
+        throw std::runtime_error("problem not found");
+    }
+    if (problem_exists(*connection, new_problem_id)) {
+        throw std::runtime_error("new problem id already exists");
+    }
+
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement("UPDATE problems SET id = ?, updated_at = ? WHERE id = ?")
+    };
+    statement->setInt64(1, new_problem_id);
+    statement->setInt64(2, std::time(nullptr));
+    statement->setInt64(3, old_problem_id);
+    statement->executeUpdate();
+}
+
+void ProblemRepository::delete_problem(std::int64_t problem_id) const {
+    auto connection = mysql_client_.create_connection();
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement("DELETE FROM problems WHERE id = ?")
+    };
+    statement->setInt64(1, problem_id);
+    if (statement->executeUpdate() == 0) {
+        throw std::runtime_error("problem not found");
+    }
+}
+
+void ProblemRepository::update_problem_title(std::int64_t problem_id, const std::string& title) const {
+    if (title.empty()) {
+        throw std::runtime_error("title cannot be empty");
+    }
+
+    auto connection = mysql_client_.create_connection();
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement("UPDATE problems SET title = ?, updated_at = ? WHERE id = ?")
+    };
+    statement->setString(1, title);
+    statement->setInt64(2, std::time(nullptr));
+    statement->setInt64(3, problem_id);
+    if (statement->executeUpdate() == 0) {
+        throw std::runtime_error("problem not found");
+    }
+}
 
 std::vector<oj::common::ProblemSummary> ProblemRepository::list() const {
     std::vector<oj::common::ProblemSummary> items;

@@ -14,6 +14,9 @@ class ProblemRepository {
 public:
     ProblemRepository();
     explicit ProblemRepository(MySqlClient mysql_client);
+    void update_problem_id(std::int64_t old_problem_id, std::int64_t new_problem_id) const;
+    void delete_problem(std::int64_t problem_id) const;
+    void update_problem_title(std::int64_t problem_id, const std::string& title) const;
     std::optional<std::string> find_statement_markdown(
     std::int64_t problem_id,
     const std::string& language = "zh-CN") const;

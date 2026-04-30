@@ -27,10 +27,9 @@ RUN git clone --depth 1 https://github.com/sewenew/redis-plus-plus.git /tmp/redi
     && rm -rf /tmp/redis-plus-plus
 
 WORKDIR /src
-COPY . /src
-
-RUN rm -rf /src/third_party/crow \
-    && git clone --depth 1 https://github.com/CrowCpp/Crow.git /src/third_party/crow
+COPY oj_platform /src
+COPY Crow /Crow
+RUN rm -rf /src/third_party/crow && ln -s /Crow /src/third_party/crow
 
 RUN cmake -S /src -B /src/build -DCMAKE_BUILD_TYPE=Release \
     && cmake --build /src/build -j"$(nproc)"

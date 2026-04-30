@@ -1,0 +1,19 @@
+*
+!Crow/
+!Crow/**
+!oj_platform/
+!oj_platform/**
+
+# Exclude local build artifacts from oj_platform so container builds use a clean tree.
+oj_platform/build/
+oj_platform/build/**
+oj_platform/CMakeFiles/
+oj_platform/CMakeFiles/**
+oj_platform/CMakeCache.txt
+oj_platform/cmake_install.cmake
+oj_platform/Makefile
+oj_platform/*.o
+oj_platform/*.a
+oj_platform/*.so
+oj_platform/*.so.*
+oj_platform/*.log

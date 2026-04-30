@@ -446,6 +446,98 @@ void register_routes(crow::Crow<>& app) {
             return json_error(400, ex.what());
         }
     });
+    CROW_ROUTE(app, "/api/admin/problems/<int>/id").methods(crow::HTTPMethod::PUT)([](const crow::request& req, std::int64_t old_problem_id) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        const auto json = crow::json::load(req.body);
+        if (!json || !json.has("new_problem_id")) {
+            return json_error(400, "new_problem_id is required");
+        }
+
+        try {
+            const auto new_problem_id = json["new_problem_id"].i();
+
+            ProblemRepository repository;
+            repository.update_problem_id(old_problem_id, new_problem_id);
+
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            redis_client.del(kProblemListCacheKey);
+
+            crow::json::wvalue body;
+            body["ok"] = true;
+            body["old_problem_id"] = old_problem_id;
+            body["new_problem_id"] = new_problem_id;
+            return crow::response{200, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+    CROW_ROUTE(app, "/api/admin/problems/<int>").methods(crow::HTTPMethod::DELETE)([](const crow::request& req, std::int64_t problem_id) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        try {
+            ProblemRepository repository;
+            repository.delete_problem(problem_id);
+
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            redis_client.del(kProblemListCacheKey);
+
+            crow::json::wvalue body;
+            body["ok"] = true;
+            body["problem_id"] = problem_id;
+            return crow::response{200, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+
+    CROW_ROUTE(app, "/api/admin/problems/<int>/title").methods(crow::HTTPMethod::PUT)([](const crow::request& req, std::int64_t problem_id) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        const auto json = crow::json::load(req.body);
+        if (!json || !json.has("title")) {
+            return json_error(400, "title is required");
+        }
+
+        try {
+            const std::string title = json["title"].s();
+
+            if (title.empty()) {
+                return json_error(400, "title cannot be empty");
+            }
+
+            if (title.size() > 128) {
+                return json_error(400, "title is too long");
+            }
+
+            ProblemRepository repository;
+            repository.update_problem_title(problem_id, title);
+
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            redis_client.del(kProblemListCacheKey);
+
+            crow::json::wvalue body;
+            body["ok"] = true;
+            body["problem_id"] = problem_id;
+            body["title"] = title;
+            return crow::response{200, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+
 
 }
 
