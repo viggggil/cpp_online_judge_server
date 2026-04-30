@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS problem_statements (
     CONSTRAINT fk_problem_statements_problem
         FOREIGN KEY (problem_id) REFERENCES problems(id)
         ON DELETE CASCADE
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS problem_tags (
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS problem_tags (
     CONSTRAINT fk_problem_tags_problem
         FOREIGN KEY (problem_id) REFERENCES problems(id)
         ON DELETE CASCADE
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS problem_testcases (
@@ -54,6 +56,7 @@ CREATE TABLE IF NOT EXISTS problem_testcases (
     CONSTRAINT fk_problem_testcases_problem
         FOREIGN KEY (problem_id) REFERENCES problems(id)
         ON DELETE CASCADE
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS submissions (
@@ -80,7 +83,9 @@ CREATE TABLE IF NOT EXISTS submissions (
     KEY idx_submissions_user_created (user_id, created_at DESC),
     KEY idx_submissions_problem_created (problem_id, created_at DESC),
     CONSTRAINT fk_submissions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT fk_submissions_problem FOREIGN KEY (problem_id) REFERENCES problems(id) ON DELETE CASCADE
+    CONSTRAINT fk_submissions_problem FOREIGN KEY (problem_id) REFERENCES problems(id) 
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS submission_testcases (

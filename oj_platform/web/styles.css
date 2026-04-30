@@ -239,6 +239,41 @@ body {
   padding: 2px 6px;
 }
 
+.statement-rendered {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.statement-rendered h1,
+.statement-rendered h2,
+.statement-rendered h3,
+.statement-rendered h4,
+.statement-rendered h5,
+.statement-rendered h6 {
+  margin-top: 0;
+}
+
+.statement-rendered pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f3f4f6;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.statement-rendered code {
+  background: #f3f4f6;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.statement-rendered ul {
+  padding-left: 20px;
+}
+
 .status-message {
   margin-top: 12px;
 }
@@ -267,6 +302,26 @@ body {
 .admin-tool-danger {
   border-color: #fecaca;
   background: #fff7f7;
+}
+
+.admin-create-card h2 {
+  margin-top: 0;
+}
+
+.admin-create-note {
+  margin: 0 0 12px;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+.admin-create-result {
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+
+.admin-create-result h2,
+.admin-create-result p {
+  margin-top: 0;
 }
 
 .danger-button {

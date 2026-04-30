@@ -5,6 +5,7 @@
 #include "services/oj_server/judge_service.h"
 #include "services/oj_server/problem_repository.h"
 #include "services/oj_server/redis_client.h"
+#include "services/oj_server/problem_importer.h"
 
 #include <crow.h>
 
@@ -102,7 +103,7 @@ crow::json::wvalue make_problem_detail_json(const oj::protocol::ProblemDetail& p
     crow::json::wvalue body;
     body["id"] = problem.id;
     body["title"] = problem.title;
-    body["statement"] = problem.statement;
+    body["statement_markdown"] = problem.statement_markdown;
     body["time_limit_ms"] = problem.time_limit_ms;
     body["memory_limit_mb"] = problem.memory_limit_mb;
 
@@ -111,15 +112,6 @@ crow::json::wvalue make_problem_detail_json(const oj::protocol::ProblemDetail& p
         tags.push_back(crow::json::wvalue(tag));
     }
     body["tags"] = std::move(tags);
-
-    crow::json::wvalue::list samples;
-    for (const auto& sample : problem.samples) {
-        crow::json::wvalue item;
-        item["input"] = sample.input;
-        item["output"] = sample.output;
-        samples.push_back(std::move(item));
-    }
-    body["samples"] = std::move(samples);
     return body;
 }
 
@@ -218,6 +210,10 @@ void register_routes(crow::Crow<>& app) {
 
     CROW_ROUTE(app, "/submissions/<string>")([](const std::string&) {
         return serve_file(resolve_web_path(std::filesystem::path{"web"} / "submission.html"));
+    });
+
+    CROW_ROUTE(app, "/web/admin-problem-create.html")([] {
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "admin-problem-create.html"));
     });
 
     CROW_ROUTE(app, "/web/<path>")([](const std::string& file_path) {
@@ -537,9 +533,44 @@ void register_routes(crow::Crow<>& app) {
             return json_error(400, ex.what());
         }
     });
+    CROW_ROUTE(app, "/api/admin/problems/import").methods(crow::HTTPMethod::POST)([](const crow::request& req) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        if (req.body.empty()) {
+            return json_error(400, "zip body is required");
+        }
+
+        try {
+            int sample_count = 2;
+            const auto sample_count_param = req.url_params.get("sample_count");
+            if (sample_count_param != nullptr) {
+                sample_count = std::stoi(sample_count_param);
+            }
+            if (sample_count < 0 || sample_count > 100) {
+                return json_error(400, "invalid sample_count");
+            }
+
+            ProblemImporter importer;
+            const auto result = importer.import_zip_body(req.body, sample_count);
+
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            redis_client.del(kProblemListCacheKey);
+            crow::json::wvalue body;
+            body["ok"] = true;
+            body["problem_id"] = result.problem_id;
+            body["title"] = result.title;
+            body["testcase_count"] = result.testcase_count;
+            return crow::response{200, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
 
 
 }
 
 } // namespace oj::server
-

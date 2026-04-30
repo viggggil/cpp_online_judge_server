@@ -169,6 +169,7 @@
       logoutBtn.style.display = 'none';
       userInfo.textContent = '未登录';
     }
+    window.dispatchEvent(new Event('oj-auth-changed'));
   }
 
   function openAuthModal(mode = 'login', message = '') {

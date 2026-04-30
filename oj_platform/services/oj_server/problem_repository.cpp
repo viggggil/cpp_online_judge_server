@@ -161,15 +161,10 @@ std::optional<oj::protocol::ProblemDetail> ProblemRepository::find_detail(std::i
     detail.title = row->getString("title");
     detail.time_limit_ms = row->getInt("time_limit_ms");
     detail.memory_limit_mb = row->getInt("memory_limit_mb");
-    detail.statement = row->isNull("statement_markdown")
-                           ? std::string{}
-                           : static_cast<std::string>(row->getString("statement_markdown"));
+    detail.statement_markdown = row->isNull("statement_markdown")
+                                    ? std::string{}
+                                    : static_cast<std::string>(row->getString("statement_markdown"));
     detail.tags = load_problem_tags(*connection, problem_id);
-
-    const auto test_cases = load_test_cases(problem_id);
-    for (std::size_t i = 0; i < test_cases.size() && i < 2; ++i) {
-        detail.samples.push_back({test_cases[i].input, test_cases[i].expected_output});
-    }
 
     return detail;
 }
@@ -245,6 +240,101 @@ void ProblemRepository::update_statement_markdown(
     statement->executeUpdate();
 }
 
+std::int64_t ProblemRepository::allocate_problem_id(std::int64_t start_id) const {
+    auto connection = mysql_client_.create_connection();
+
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "SELECT id FROM problems WHERE id >= ? ORDER BY id ASC")
+    };
+
+    statement->setInt64(1, start_id);
+
+    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+
+    std::int64_t candidate = start_id;
+    while (result->next()) {
+        const auto existing_id = result->getInt64("id");
+        if (existing_id > candidate) {
+            break;
+        }
+        if (existing_id == candidate) {
+            ++candidate;
+        }
+    }
+
+    return candidate;
+}
+
+void ProblemRepository::import_problem(const ImportedProblem& problem) const {
+    auto connection = mysql_client_.create_connection();
+    try {
+        connection->setAutoCommit(false);
+
+        {
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "INSERT INTO problems "
+                    "(id, title, time_limit_ms, memory_limit_mb, checker_type, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP())")
+            };
+
+            statement->setInt64(1, problem.id);
+            statement->setString(2, problem.title);
+            statement->setInt(3, problem.time_limit_ms);
+            statement->setInt(4, problem.memory_limit_mb);
+            statement->setString(5, problem.checker_type);
+            statement->executeUpdate();
+        }
+
+        {
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "INSERT INTO problem_statements "
+                    "(problem_id, language, statement_markdown) "
+                    "VALUES (?, 'zh-CN', ?)")
+            };
+
+            statement->setInt64(1, problem.id);
+            statement->setString(2, problem.statement_markdown);
+            statement->executeUpdate();
+        }
+
+        for (const auto& tag : problem.tags) {
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "INSERT INTO problem_tags (problem_id, tag) VALUES (?, ?)")
+            };
+            statement->setInt64(1, problem.id);
+            statement->setString(2, tag);
+            statement->executeUpdate();
+        }
+        for (const auto& tc : problem.testcases) {
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "INSERT INTO problem_testcases "
+                    "(problem_id, case_no, input_data, expected_output, is_sample) "
+                    "VALUES (?, ?, ?, ?, ?)")
+            };
+
+            statement->setInt64(1, problem.id);
+            statement->setInt(2, tc.case_no);
+            statement->setString(3, tc.input_data);
+            statement->setString(4, tc.expected_output);
+            statement->setBoolean(5, tc.is_sample);
+            statement->executeUpdate();
+        }
+
+        connection->commit();
+        connection->setAutoCommit(true);
+    } catch (...) {
+        try {
+            connection->rollback();
+            connection->setAutoCommit(true);
+        } catch (...) {
+        }
+        throw;
+    }
+}
 
 } // namespace oj::server
-

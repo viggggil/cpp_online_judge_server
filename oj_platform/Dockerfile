@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libhiredis1.1.0 \
     libmysqlcppconn7t64 \
     g++ \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/lib/libredis++.so* /usr/local/lib/

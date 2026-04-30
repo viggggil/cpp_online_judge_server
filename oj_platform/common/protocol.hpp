@@ -121,17 +121,11 @@ struct ProblemMeta {
 
 // 面向 OJ Server 对外 API 的题目详情。
 struct ProblemDetail {
-    struct Sample {
-        std::string input;
-        std::string output;
-    };
-
     std::int64_t id{0};
     std::string title;
-    std::string statement;
+    std::string statement_markdown;
     std::int32_t time_limit_ms{1000};
     std::int32_t memory_limit_mb{128};
-    std::vector<Sample> samples;
     std::vector<std::string> tags;
 };
 

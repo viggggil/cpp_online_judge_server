@@ -28,6 +28,10 @@ struct ServiceConfig {
     const char* service_name{};
 };
 
+struct AuthConfig {
+    const char* admin_register_code{env_or_default("OJ_ADMIN_REGISTER_CODE", "")};
+};
+
 struct RedisConfig {
     const char* host{env_or_default("OJ_REDIS_HOST", "127.0.0.1")};
     int port{env_int_or_default("OJ_REDIS_PORT", 6379)};
