@@ -95,8 +95,12 @@ if(OJ_PLATFORM_BUILD_TESTS)
         tests/protocol_json_test.cpp
         tests/dispatcher_utils_test.cpp
         tests/judge_summary_test.cpp
+        tests/judge_core_test.cpp
         common/protocol_json.cpp
         services/judge_dispatcher/dispatcher_utils.cpp
+        services/judge_worker/judge_core.cpp
+        services/judge_worker/compile_service.cpp
+        services/judge_worker/run_service.cpp
         services/judge_worker/judge_summary.cpp
     )
     target_include_directories(oj_platform_unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

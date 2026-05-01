@@ -67,6 +67,7 @@ void set_limit(int resource, rlim_t soft, rlim_t hard) {
 
 } // namespace
 
+// 在受限子进程中完成源码落盘、编译执行以及编译日志采集。
 CompileResult CompileService::compile(const std::filesystem::path& work_directory,
                                       const std::string& language,
                                       const std::string& source_code) const {
@@ -160,6 +161,7 @@ std::filesystem::path CompileService::resolve_executable_path(const std::filesys
     return work_directory / "main.bin";
 }
 
+// 生成与真实执行参数一致的编译命令字符串，便于日志记录和问题排查。
 std::string CompileService::build_compile_command(const std::filesystem::path& source_path,
                                                   const std::filesystem::path& executable_path,
                                                   const std::string& language,
@@ -176,4 +178,3 @@ std::string CompileService::build_compile_command(const std::filesystem::path& s
 }
 
 } // namespace oj::worker
-

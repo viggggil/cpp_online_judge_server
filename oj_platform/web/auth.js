@@ -42,6 +42,7 @@
     return Boolean(getToken());
   }
 
+  // 统一为受保护请求补上 JWT，并在令牌失效时自动清理登录态和弹出登录框。
   async function authFetch(url, options = {}) {
     const headers = new Headers(options.headers || {});
     if (getToken()) {
@@ -57,6 +58,7 @@
     return response;
   }
 
+  // 用 `/api/auth/me` 和本地令牌同步前端登录态，避免页面刷新后状态失真。
   async function syncSession() {
     if (!getToken()) {
       updateAuthUI();
@@ -88,6 +90,7 @@
     }
   }
 
+  // 复用同一个登录态同步 Promise，避免多个页面模块同时重复请求用户信息。
   function initAuth() {
     if (!authSyncPromise) {
       authSyncPromise = syncSession().finally(() => {
@@ -97,6 +100,7 @@
     return authSyncPromise;
   }
 
+  // 按需创建全局登录浮层和弹窗壳子，并集中绑定所有鉴权交互事件。
   function ensureAuthShell() {
     if (document.getElementById('auth-floating')) return;
 
@@ -155,6 +159,7 @@
     updateAuthUI();
   }
 
+  // 根据当前登录状态刷新悬浮鉴权区域，并通知其他页面模块重新同步权限相关 UI。
   function updateAuthUI() {
     ensureAuthShell();
     const openBtn = document.getElementById('auth-open-btn');
@@ -172,6 +177,7 @@
     window.dispatchEvent(new Event('oj-auth-changed'));
   }
 
+  // 切换登录、普通注册和管理员注册三种模式，并更新弹窗中的按钮和提示文案。
   function openAuthModal(mode = 'login', message = '') {
     ensureAuthShell();
     const modal = document.getElementById('auth-modal');
@@ -192,6 +198,7 @@
     if (modal) modal.classList.add('hidden');
   }
 
+  // 根据当前弹窗模式选择登录或注册接口，并在成功后写入本地会话。
   async function submitAuth() {
     const modal = document.getElementById('auth-modal');
     const mode = modal.dataset.mode || 'login';

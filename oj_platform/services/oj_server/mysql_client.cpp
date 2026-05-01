@@ -30,6 +30,7 @@ std::string trim_copy(std::string text) {
     return text;
 }
 
+// 在不引入完整 SQL 解析器的前提下，把 schema.sql 粗略拆成可逐条执行的语句。
 std::vector<std::string> split_sql_statements(const std::string& script) {
     std::vector<std::string> statements;
     std::string current;
@@ -105,6 +106,7 @@ std::filesystem::path MySqlClient::resolve_schema_path() const {
     return oj::common::resolve_project_path(std::filesystem::path{"sql"} / "schema.sql");
 }
 
+// 首次建连时自动执行 schema.sql，保证开发和测试环境具备所需表结构。
 void MySqlClient::initialize_schema(sql::Connection& connection) const {
     std::call_once(g_schema_init_once, [&]() {
         const auto schema_path = resolve_schema_path();
@@ -127,6 +129,7 @@ void MySqlClient::initialize_schema(sql::Connection& connection) const {
     });
 }
 
+// 建立一条新的 MySQL 连接，并完成建库、选库与会话初始化。
 std::unique_ptr<sql::Connection> MySqlClient::open_new_connection() const {
     try {
         auto* driver = sql::mysql::get_driver_instance();
@@ -167,6 +170,7 @@ void MySqlClient::recycle_connection(std::unique_ptr<sql::Connection> connection
     pool_state_->condition.notify_one();
 }
 
+// 从连接池借出一个可用连接，必要时阻塞等待或在上限内新建连接。
 MySqlClient::ConnectionHandle MySqlClient::create_connection() const {
     std::unique_ptr<sql::Connection> connection;
     {

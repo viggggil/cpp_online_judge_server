@@ -47,6 +47,7 @@ long long unix_now() {
     return static_cast<long long>(std::time(nullptr));
 }
 
+// 把磁盘上的单道旧格式题目目录迁移到新的 MySQL 表结构中。
 void migrate_problem(sql::Connection& connection, const std::filesystem::path& problem_dir) {
     const auto meta_path = problem_dir / "meta.json";
     const auto meta_opt = load_json_file(meta_path);

@@ -292,6 +292,7 @@ int parse_memory_mb(const std::string& raw_value) {
     throw std::runtime_error("unsupported memory unit: " + raw_value);
 }
 
+// 用项目约定的简化规则解析 problem.yaml，提取标题、限制和标签信息。
 ParsedYaml parse_problem_yaml(const std::filesystem::path& yaml_path) {
     const std::string content = read_text_file(yaml_path);
 
@@ -370,6 +371,7 @@ bool has_extension(const std::filesystem::path& path, const std::string& extensi
     return path.extension().string() == extension;
 }
 
+// 校验 testdata 中的输入输出文件编号，并按题目包规则恢复测试点列表。
 int parse_case_no_from_stem(const std::filesystem::path& path) {
     const std::string stem = path.stem().string();
     if (stem.empty()) {
@@ -385,6 +387,7 @@ int parse_case_no_from_stem(const std::filesystem::path& path) {
     return std::stoi(stem);
 }
 
+// 校验 testdata 中的输入输出文件配对关系，并按编号顺序恢复测试点列表。
 std::vector<ImportedProblem::TestCase> load_testcases(
     const std::filesystem::path& testdata_dir,
     int sample_count) {
@@ -449,6 +452,7 @@ std::vector<ImportedProblem::TestCase> load_testcases(
     return testcases;
 }
 
+// 从解压后的题目目录中组装出可直接入库的题目完整数据结构。
 ImportedProblem parse_problem_package(
     const std::filesystem::path& package_root,
     int sample_count) {
@@ -515,6 +519,7 @@ private:
 ProblemImporter::ProblemImporter(ProblemRepository repository)
     : repository_(std::move(repository)) {}
 
+// 校验并解压上传的 ZIP 题目包，然后转交目录导入逻辑继续处理。
 ProblemImporter::ImportResult ProblemImporter::import_zip_body(
     const std::string& zip_body,
     int sample_count) const {
@@ -541,6 +546,7 @@ ProblemImporter::ImportResult ProblemImporter::import_zip_body(
     return import_from_directory(package_root, sample_count);
 }
 
+// 从题目目录解析内容、自动分配题号并将整道题原子性写入数据库。
 ProblemImporter::ImportResult ProblemImporter::import_from_directory(
     const std::filesystem::path& root,
     int sample_count) const {

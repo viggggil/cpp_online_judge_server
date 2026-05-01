@@ -21,6 +21,7 @@ std::filesystem::path executable_dir() {
     return path.empty() ? std::filesystem::current_path() : path.parent_path();
 }
 
+// 按多种候选位置解析项目内资源路径，兼容源码目录和构建目录两种运行方式。
 std::filesystem::path resolve_project_path(const std::filesystem::path& relative_path) {
     if (relative_path.is_absolute() && std::filesystem::exists(relative_path)) {
         return relative_path;

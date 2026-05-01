@@ -36,6 +36,7 @@ function setStatus(message, isError = false) {
   node.classList.toggle('status-ok', !isError && Boolean(message));
 }
 
+// 从后台加载题面 Markdown，并同步刷新编辑器与预览区域。
 async function loadStatement(problemId) {
   const response = await window.ojAuth.authFetch(`/api/admin/problems/${problemId}/statement`);
   const data = await response.json();
@@ -47,6 +48,7 @@ async function loadStatement(problemId) {
   updatePreview();
 }
 
+// 加载题目的基础信息，回填题号、标题和页面标题。
 async function loadProblemMeta(problemId) {
   const response = await window.ojAuth.authFetch(`/api/problems/${problemId}`);
   const data = await response.json();
@@ -59,6 +61,7 @@ async function loadProblemMeta(problemId) {
   document.getElementById('page-title').textContent = `编辑题面 - ${data.id}`;
 }
 
+// 把当前编辑器中的题面内容提交到后台并反馈保存状态。
 async function saveStatement(problemId) {
   const saveButton = document.getElementById('save-btn');
   saveButton.disabled = true;
@@ -88,6 +91,7 @@ async function saveStatement(problemId) {
   }
 }
 
+// 更新题目标题，并在成功后同步页面上的展示文案。
 async function updateProblemTitle(problemId) {
   const title = document.getElementById('problem-title-input').value.trim();
   if (!title) {
@@ -116,6 +120,7 @@ async function updateProblemTitle(problemId) {
   }
 }
 
+// 修改题号并在成功后跳转到新的编辑地址，保持页面状态与题号一致。
 async function updateProblemId(problemId) {
   const rawValue = document.getElementById('problem-id-input').value.trim();
   const newProblemId = Number(rawValue);
@@ -153,6 +158,7 @@ async function updateProblemId(problemId) {
   }
 }
 
+// 删除题目并在操作完成后把管理员带回首页，避免停留在失效页面上。
 async function deleteProblem(problemId) {
   const confirmed = window.confirm(`确定要删除题目 ${problemId} 吗？此操作不可恢复。`);
   if (!confirmed) {
@@ -180,6 +186,7 @@ async function deleteProblem(problemId) {
   }
 }
 
+// 初始化题面编辑页，校验管理员身份并串起元信息、题面和交互事件的加载流程。
 async function initPage() {
   await window.ojAuth.initAuth();
   if (!window.ojAuth.protectPage()) {

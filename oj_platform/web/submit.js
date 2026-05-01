@@ -3,6 +3,7 @@ function problemIdFromPath() {
   return parts[1];
 }
 
+// 加载提交页顶部的题目信息，帮助用户在提交前确认当前题号与限制。
 async function loadProblemInfo() {
   await window.ojAuth.initAuth();
   if (!window.ojAuth.protectPage()) {
@@ -16,6 +17,7 @@ async function loadProblemInfo() {
   document.getElementById('problem-info').textContent = `${problem.id} - ${problem.title}\n时间限制: ${problem.time_limit_ms} ms | 内存限制: ${problem.memory_limit_mb} MB`;
 }
 
+// 收集用户填写的代码和语言，并调用提交接口后跳转到对应的评测详情页。
 async function submitCode() {
   await window.ojAuth.initAuth();
   if (!window.ojAuth.requireLogin('提交代码前请先登录')) {

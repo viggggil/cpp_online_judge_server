@@ -25,6 +25,7 @@ function setCreateEntryVisible(currentUser) {
   createLink.classList.toggle('hidden', !currentUser?.is_admin);
 }
 
+// 根据当前登录用户是否为管理员，动态决定首页导航里是否展示出题入口。
 async function refreshAdminNavigation() {
   try {
     const currentUser = await fetchCurrentUserOptional();
@@ -34,6 +35,7 @@ async function refreshAdminNavigation() {
   }
 }
 
+// 加载题目列表并绑定需要登录或管理员权限的导航与入口行为。
 async function loadProblems() {
   await window.ojAuth.initAuth();
   await refreshAdminNavigation();

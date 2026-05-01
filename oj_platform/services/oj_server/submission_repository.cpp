@@ -50,6 +50,7 @@ std::optional<std::int64_t> find_user_id(sql::Connection& connection, const std:
     return result->getInt64("id");
 }
 
+// 将 submissions 主表中的一行记录恢复成服务层统一使用的提交对象。
 StoredSubmission build_submission_from_row(sql::ResultSet& row) {
     StoredSubmission stored;
     stored.result.submission_id = row.getString("submission_id");
@@ -74,6 +75,7 @@ StoredSubmission build_submission_from_row(sql::ResultSet& row) {
     return stored;
 }
 
+// 把 submission_testcases 子表中的逐点评测结果追加到完整提交对象里。
 void load_testcases(sql::Connection& connection, std::int64_t submission_db_id, StoredSubmission& stored) {
     auto statement = std::unique_ptr<sql::PreparedStatement>{
         connection.prepareStatement(
@@ -102,6 +104,7 @@ SubmissionRepository::SubmissionRepository()
 SubmissionRepository::SubmissionRepository(MySqlClient mysql_client)
     : mysql_client_(std::move(mysql_client)) {}
 
+// 在用户提交代码时先创建一条初始记录，为异步判题回填结果预留主键。
 void SubmissionRepository::create_submission(const std::string& submission_id,
                                              const std::string& username,
                                              const oj::common::SubmissionRequest& request,
@@ -140,6 +143,7 @@ void SubmissionRepository::create_submission(const std::string& submission_id,
     statement->executeUpdate();
 }
 
+// 覆盖更新提交主状态，并重建逐点评测明细以保持数据库结果与最新判题一致。
 void SubmissionRepository::update_submission(const oj::common::SubmissionResult& result) const {
     auto connection = mysql_client_.create_connection();
     const auto submission_db_id = find_db_id(*connection, result.submission_id);
@@ -192,6 +196,7 @@ void SubmissionRepository::update_submission(const oj::common::SubmissionResult&
     }
 }
 
+// 读取一次提交的主记录和逐点评测明细，恢复成完整的提交结果对象。
 std::optional<StoredSubmission> SubmissionRepository::find_submission(const std::string& submission_id) const {
     auto connection = mysql_client_.create_connection();
     auto statement = std::unique_ptr<sql::PreparedStatement>{
@@ -211,6 +216,7 @@ std::optional<StoredSubmission> SubmissionRepository::find_submission(const std:
     return stored;
 }
 
+// 在查询单次提交时额外校验归属用户，避免用户访问到别人的结果。
 std::optional<StoredSubmission> SubmissionRepository::find_submission_for_user(const std::string& submission_id,
                                                                                const std::string& username) const {
     const auto stored = find_submission(submission_id);
@@ -220,6 +226,7 @@ std::optional<StoredSubmission> SubmissionRepository::find_submission_for_user(c
     return stored;
 }
 
+// 按时间倒序列出某个用户的最近提交摘要，供提交列表页展示。
 std::vector<oj::common::SubmissionListItem> SubmissionRepository::list_submissions_for_user(const std::string& username,
                                                                                             std::size_t limit) const {
     auto connection = mysql_client_.create_connection();

@@ -53,6 +53,7 @@ std::vector<oj::protocol::TestCase> load_test_cases_from_problem_directory(std::
 
 } // namespace
 
+// 串起编译、逐点评测和结果汇总，是 judge_worker 的核心判题入口。
 oj::protocol::JudgeResponse JudgeCore::judge(const oj::protocol::JudgeRequest& request) const {
     oj::protocol::JudgeResponse response;
     response.submission_id = request.submission_id;
@@ -79,10 +80,17 @@ oj::protocol::JudgeResponse JudgeCore::judge(const oj::protocol::JudgeRequest& r
             return response;
         }
 
-        const auto file_test_cases = load_test_cases_from_problem_directory(request.problem_id);
-        const auto& effective_test_cases = file_test_cases.empty() ? request.test_cases : file_test_cases;
+        const std::vector<oj::protocol::TestCase>* effective_test_cases = &request.test_cases;
+        std::vector<oj::protocol::TestCase> fallback_test_cases;
 
-        for (const auto& test_case : effective_test_cases) {
+        if (effective_test_cases->empty()) {
+            // Dispatcher/OJ Server 下发的测试点是权威数据源。
+            // 仅在兼容历史本地目录模式、且请求未携带测试点时，才回退到磁盘读取。
+            fallback_test_cases = load_test_cases_from_problem_directory(request.problem_id);
+            effective_test_cases = &fallback_test_cases;
+        }
+
+        for (const auto& test_case : *effective_test_cases) {
             response.test_case_results.push_back(
                 run_single_testcase(compile_result.executable_path,
                                     work_directory,
@@ -104,6 +112,7 @@ oj::protocol::JudgeResponse JudgeCore::judge(const oj::protocol::JudgeRequest& r
     return response;
 }
 
+// 为每次提交创建独立工作目录，避免不同提交之间的中间文件互相污染。
 std::filesystem::path JudgeCore::prepare_work_directory(std::int64_t submission_id) const {
     auto work_directory = std::filesystem::path{"runtime"} / "judge_worker" /
                           ("submission_" + std::to_string(submission_id));
@@ -113,6 +122,7 @@ std::filesystem::path JudgeCore::prepare_work_directory(std::int64_t submission_
     return work_directory;
 }
 
+// 执行单个测试点并把运行结果转换成统一的判题明细结构。
 oj::protocol::TestCaseResult JudgeCore::run_single_testcase(const std::filesystem::path& executable_path,
                                                             const std::filesystem::path& submission_work_directory,
                                                             std::size_t case_index,
@@ -169,4 +179,3 @@ std::string JudgeCore::normalize_output(std::string text) {
 }
 
 } // namespace oj::worker
-

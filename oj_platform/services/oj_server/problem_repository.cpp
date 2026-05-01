@@ -55,6 +55,7 @@ ProblemRepository::ProblemRepository()
 ProblemRepository::ProblemRepository(MySqlClient mysql_client)
     : mysql_client_(std::move(mysql_client)) {}
 
+// 安全地修改题号，并保证旧题号存在且新题号不会与已有题目冲突。
 void ProblemRepository::update_problem_id(std::int64_t old_problem_id, std::int64_t new_problem_id) const {
     if (old_problem_id <= 0 || new_problem_id <= 0) {
         throw std::runtime_error("problem id must be positive");
@@ -80,6 +81,7 @@ void ProblemRepository::update_problem_id(std::int64_t old_problem_id, std::int6
     statement->executeUpdate();
 }
 
+// 删除题目主记录，依赖数据库级联约束一并清理相关附属数据。
 void ProblemRepository::delete_problem(std::int64_t problem_id) const {
     auto connection = mysql_client_.create_connection();
     auto statement = std::unique_ptr<sql::PreparedStatement>{
@@ -91,6 +93,7 @@ void ProblemRepository::delete_problem(std::int64_t problem_id) const {
     }
 }
 
+// 更新题目标题并同步刷新更新时间，供后台编辑页即时生效。
 void ProblemRepository::update_problem_title(std::int64_t problem_id, const std::string& title) const {
     if (title.empty()) {
         throw std::runtime_error("title cannot be empty");
@@ -120,6 +123,7 @@ std::vector<oj::common::ProblemSummary> ProblemRepository::list() const {
     return items;
 }
 
+// 从题目主表与标签表聚合出题目列表元信息，供首页列表与缓存使用。
 std::vector<oj::protocol::ProblemMeta> ProblemRepository::list_problem_meta() const {
     auto connection = mysql_client_.create_connection();
     auto statement = std::unique_ptr<sql::PreparedStatement>{
@@ -141,6 +145,7 @@ std::vector<oj::protocol::ProblemMeta> ProblemRepository::list_problem_meta() co
     return result;
 }
 
+// 加载单题完整展示信息，包括题面、限制和标签。
 std::optional<oj::protocol::ProblemDetail> ProblemRepository::find_detail(std::int64_t problem_id) const {
     auto connection = mysql_client_.create_connection();
     auto statement = std::unique_ptr<sql::PreparedStatement>{
@@ -169,6 +174,7 @@ std::optional<oj::protocol::ProblemDetail> ProblemRepository::find_detail(std::i
     return detail;
 }
 
+// 按测试点编号顺序从数据库恢复判题所需的输入输出数据。
 std::vector<oj::protocol::TestCase> ProblemRepository::load_test_cases(std::int64_t problem_id) const {
     auto connection = mysql_client_.create_connection();
     auto statement = std::unique_ptr<sql::PreparedStatement>{
@@ -188,6 +194,7 @@ std::vector<oj::protocol::TestCase> ProblemRepository::load_test_cases(std::int6
     return test_cases;
 }
 
+// 查询指定语言版本的题面文本，供后台编辑和前台展示复用。
 std::optional<std::string> ProblemRepository::find_statement_markdown(
     std::int64_t problem_id,
     const std::string& language) const {
@@ -215,6 +222,7 @@ std::optional<std::string> ProblemRepository::find_statement_markdown(
     return static_cast<std::string>(result->getString("statement_markdown"));
 }
 
+// 以 UPSERT 方式更新题面内容，避免后台编辑时拆成新增和修改两套流程。
 void ProblemRepository::update_statement_markdown(
     std::int64_t problem_id,
     const std::string& language,
@@ -240,6 +248,7 @@ void ProblemRepository::update_statement_markdown(
     statement->executeUpdate();
 }
 
+// 从给定起始题号开始寻找第一个未被占用的可用题号。
 std::int64_t ProblemRepository::allocate_problem_id(std::int64_t start_id) const {
     auto connection = mysql_client_.create_connection();
 
@@ -266,6 +275,7 @@ std::int64_t ProblemRepository::allocate_problem_id(std::int64_t start_id) const
     return candidate;
 }
 
+// 在一个事务中导入题目主信息、题面、标签和测试点，保证导入结果一致。
 void ProblemRepository::import_problem(const ImportedProblem& problem) const {
     auto connection = mysql_client_.create_connection();
     try {

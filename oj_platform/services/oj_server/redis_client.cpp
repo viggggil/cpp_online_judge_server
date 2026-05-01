@@ -13,6 +13,7 @@ struct RedisClient::Impl {
 
 namespace {
 
+// 把项目配置转换成 redis++ 可直接使用的连接参数。
 sw::redis::ConnectionOptions make_connection_options(const oj::common::RedisConfig& config) {
     sw::redis::ConnectionOptions options;
     options.host = config.host;

@@ -68,6 +68,7 @@ int open_output_file(const std::filesystem::path& path) {
     return ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
 }
 
+// 按信号类型和资源使用情况，把异常退出映射成判题系统可理解的结果状态。
 oj::protocol::JudgeStatus map_signal_to_status(int signal_number,
                                                bool timed_out,
                                                std::int32_t memory_limit_mb,
@@ -86,6 +87,7 @@ oj::protocol::JudgeStatus map_signal_to_status(int signal_number,
 
 } // namespace
 
+// 在受限子进程中执行选手程序，并采集时间、内存、标准输出和错误信息。
 RunResult RunService::run(const std::filesystem::path& executable_path,
                           const std::string& standard_input,
                           std::int32_t time_limit_ms,
@@ -224,4 +226,3 @@ RunResult RunService::run(const std::filesystem::path& executable_path,
 }
 
 } // namespace oj::worker
-

@@ -63,6 +63,7 @@ std::string build_submission_detail(const std::string& status) {
 
 } // namespace
 
+// 创建提交记录、校验题目存在性并把判题任务投递到 Redis 队列中等待调度。
 oj::common::SubmissionResult JudgeService::submit(const std::string& username,
                                                   const oj::common::SubmissionRequest& request) const {
     const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -130,6 +131,7 @@ oj::common::SubmissionResult JudgeService::submit(const std::string& username,
     return result;
 }
 
+// 查询指定用户的一次提交，并把持久化状态整理成前端可直接展示的结果。
 std::optional<oj::common::SubmissionResult> JudgeService::find_submission(const std::string& username,
                                                                           const std::string& submission_id) const {
     SubmissionRepository submission_repository;
@@ -148,6 +150,7 @@ std::optional<oj::common::SubmissionResult> JudgeService::find_submission(const 
     return result;
 }
 
+// 按用户维度列出最近提交记录，供提交列表页面直接展示。
 std::vector<oj::common::SubmissionListItem> JudgeService::list_submissions(const std::string& username) const {
     SubmissionRepository submission_repository;
     return submission_repository.list_submissions_for_user(username);

@@ -11,6 +11,7 @@ function renderStatus(status) {
     : `<span class="status-bad">${status}</span>`;
 }
 
+// 加载当前用户的提交历史，并按列表形式展示状态、耗时和跳转链接。
 async function loadSubmissions() {
   await window.ojAuth.initAuth();
   if (!window.ojAuth.protectPage()) {

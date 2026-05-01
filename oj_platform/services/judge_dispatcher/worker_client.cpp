@@ -38,6 +38,7 @@ private:
     int fd_{-1};
 };
 
+// 建立到 judge_worker 的 TCP 连接，并配置连接超时和读取超时。
 int connect_to_host(const oj::common::JudgeWorkerEndpoint& endpoint) {
     ::addrinfo hints{};
     hints.ai_family = AF_UNSPEC;
@@ -107,6 +108,7 @@ std::string read_all(int fd) {
     return response;
 }
 
+// 从原始 HTTP 响应中校验状态码并提取真正的 JSON 响应体。
 std::string extract_http_body(const std::string& raw_response) {
     const auto header_end = raw_response.find("\r\n\r\n");
     if (header_end == std::string::npos) {
@@ -131,6 +133,7 @@ std::string extract_http_body(const std::string& raw_response) {
 WorkerClient::WorkerClient(oj::common::JudgeWorkerEndpoint endpoint)
     : endpoint_(endpoint) {}
 
+// 使用最小 HTTP 客户端把单次判题请求发送给指定的 judge_worker。
 oj::protocol::JudgeResponse WorkerClient::judge(const oj::protocol::JudgeRequest& request) const {
     const auto payload = oj::common::serialize_judge_request(request);
     const auto http_request = std::string{"POST "} + endpoint_.judge_api_path + " HTTP/1.1\r\n" +
@@ -159,6 +162,7 @@ WorkerPool::WorkerPool(std::vector<oj::common::JudgeWorkerEndpoint> endpoints,
     }
 }
 
+// 依次尝试当前可用的 worker，并把失败节点暂时放入冷却期避免连续重试。
 oj::protocol::JudgeResponse WorkerPool::judge(const oj::protocol::JudgeRequest& request) {
     if (workers_.empty()) {
         throw std::runtime_error("no judge workers configured");

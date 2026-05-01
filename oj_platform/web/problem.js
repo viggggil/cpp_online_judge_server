@@ -30,6 +30,7 @@ function bindEditButton(problemId, currentUser) {
   });
 }
 
+// 加载题面页数据，并在管理员访问时额外开放后台编辑入口。
 async function loadProblem() {
   await window.ojAuth.initAuth();
   if (!window.ojAuth.protectPage()) {

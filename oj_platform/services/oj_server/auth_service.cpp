@@ -141,6 +141,7 @@ std::string hmac_sha256(const std::string& data, const std::string& secret) {
     return std::string(reinterpret_cast<char*>(digest), digest_length);
 }
 
+// 构造带过期时间和角色信息的 JWT，供前端后续请求携带身份凭证。
 std::string create_token(const std::string& username, const std::string& role){
     crow::json::wvalue header;
     header["alg"] = "HS256";
@@ -159,6 +160,7 @@ std::string create_token(const std::string& username, const std::string& role){
     return signing_input + "." + signature;
 }
 
+// 校验 JWT 的签名和有效期，并把载荷恢复成当前请求可用的用户身份。
 std::optional<AuthenticatedUser> parse_token(const std::string& token) {
     const auto first_dot = token.find('.');
     if (first_dot == std::string::npos) {
@@ -203,6 +205,7 @@ AuthService::AuthService()
 AuthService::AuthService(MySqlClient mysql_client)
     : mysql_client_(std::move(mysql_client)) {}
 
+// 校验普通用户注册参数并落库，同时直接签发一个可用的登录令牌。
 std::string AuthService::register_user(const std::string& username, const std::string& password) const {
     validate_username(username);
     validate_password(password);
@@ -223,6 +226,7 @@ std::string AuthService::register_user(const std::string& username, const std::s
     return create_token(username, "user");
 }
 
+// 仅在管理员注册码校验通过时允许创建管理员账号，并返回管理员令牌。
 std::string AuthService::register_admin(const std::string& username,
                                        const std::string& password,
                                        const std::string& admin_code) const {
@@ -253,6 +257,7 @@ std::string AuthService::register_admin(const std::string& username,
     return create_token(username, "admin");
 }
 
+// 用数据库中的 bcrypt 摘要校验登录请求，并签发新的 JWT。
 std::string AuthService::login_user(const std::string& username, const std::string& password) const {
     validate_username(username);
     validate_password(password);
@@ -266,6 +271,7 @@ std::string AuthService::login_user(const std::string& username, const std::stri
     return create_token(user->username, user->role);
 }
 
+// 对外暴露统一的令牌校验入口，供路由层执行登录态鉴权。
 std::optional<AuthenticatedUser> AuthService::verify_token(const std::string& token) const {
     if (token.empty()) {
         return std::nullopt;

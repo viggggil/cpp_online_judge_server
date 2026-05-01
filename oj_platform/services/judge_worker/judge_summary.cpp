@@ -4,6 +4,7 @@
 
 namespace oj::worker {
 
+// 汇总所有测试点结果，计算总耗时、峰值内存并确定最终判题状态。
 void summarize_judge_response(oj::protocol::JudgeResponse& response) {
     response.total_time_used_ms = 0;
     response.peak_memory_used_kb = 0;

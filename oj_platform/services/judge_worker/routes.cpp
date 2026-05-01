@@ -24,6 +24,7 @@ oj::protocol::JudgeRequest parse_judge_request(const crow::request& req) {
 
 } // namespace
 
+// 注册 judge_worker 的健康检查和判题接口，并把 HTTP 请求接入核心判题流程。
 void register_routes(crow::Crow<>& app, const WorkerAppContext& context) {
     CROW_ROUTE(app, "/")([] {
         return crow::response{200, "judge_worker is running"};
@@ -53,4 +54,3 @@ void register_routes(crow::Crow<>& app, const WorkerAppContext& context) {
 }
 
 } // namespace oj::worker
-

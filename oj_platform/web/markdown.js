@@ -16,6 +16,7 @@
       .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
   }
 
+  // 用轻量规则把题面 Markdown 转成可展示 HTML，兼顾安全转义与常见语法支持。
   function markdownToHtml(markdown) {
     const escaped = escapeHtml(markdown || '');
     const lines = escaped.split('\n');

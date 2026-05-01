@@ -99,6 +99,7 @@ crow::response serve_file(const std::filesystem::path& path) {
     return resp;
 }
 
+// 把题目详情转换成前端展示接口使用的 JSON 结构。
 crow::json::wvalue make_problem_detail_json(const oj::protocol::ProblemDetail& problem) {
     crow::json::wvalue body;
     body["id"] = problem.id;
@@ -115,6 +116,7 @@ crow::json::wvalue make_problem_detail_json(const oj::protocol::ProblemDetail& p
     return body;
 }
 
+// 把一次提交的完整判题结果转换成前端可直接消费的 JSON 响应。
 crow::json::wvalue make_submission_json(const oj::common::SubmissionResult& result) {
     crow::json::wvalue body;
     body["submission_id"] = result.submission_id;
@@ -152,6 +154,7 @@ crow::json::wvalue make_submission_json(const oj::common::SubmissionResult& resu
     return body;
 }
 
+// 生成提交列表接口所需的轻量摘要 JSON，避免返回完整判题明细。
 crow::json::wvalue make_submission_list_json(const std::vector<oj::common::SubmissionListItem>& submissions) {
     crow::json::wvalue::list items;
     for (const auto& submission : submissions) {
@@ -174,6 +177,7 @@ crow::json::wvalue make_submission_list_json(const std::vector<oj::common::Submi
     return body;
 }
 
+// 生成题目列表接口 JSON，并与 Redis 缓存结构保持一致。
 crow::json::wvalue make_problem_list_json(const std::vector<oj::common::ProblemSummary>& problems) {
     crow::json::wvalue::list items;
     for (const auto& problem : problems) {
@@ -191,6 +195,7 @@ crow::json::wvalue make_problem_list_json(const std::vector<oj::common::ProblemS
 
 } // namespace
 
+// 统一注册静态页面、鉴权接口、题目接口、提交接口和管理员后台接口。
 void register_routes(crow::Crow<>& app) {
     CROW_ROUTE(app, "/")([] {
         return serve_file(resolve_web_path(std::filesystem::path{"web"} / "index.html"));

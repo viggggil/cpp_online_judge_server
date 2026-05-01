@@ -35,6 +35,7 @@ function renderImportResult(result) {
   `;
 }
 
+// 读取管理员选择的 ZIP 题目包并调用后台导入接口，随后刷新页面提示与结果区域。
 async function importProblemPackage() {
   const input = document.getElementById('problem-package-input');
   const file = input.files?.[0];
@@ -78,6 +79,7 @@ async function importProblemPackage() {
   }
 }
 
+// 初始化创建题目页面，校验管理员身份并绑定导入按钮事件。
 async function initPage() {
   await window.ojAuth.initAuth();
   if (!window.ojAuth.protectPage()) {

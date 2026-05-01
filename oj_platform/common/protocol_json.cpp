@@ -30,6 +30,7 @@ oj::protocol::LanguageType parse_language(const std::string& text) {
 
 } // namespace
 
+// 将判题请求编码成调度服务和执行服务之间传输的 JSON 数据。
 std::string serialize_judge_request(const oj::protocol::JudgeRequest& request) {
     crow::json::wvalue body;
     body["submission_id"] = request.submission_id;
@@ -50,6 +51,7 @@ std::string serialize_judge_request(const oj::protocol::JudgeRequest& request) {
     return body.dump();
 }
 
+// 从跨服务传输的 JSON 中还原判题请求，并补齐缺省字段。
 oj::protocol::JudgeRequest deserialize_judge_request(const std::string& payload) {
     const auto json = crow::json::load(payload);
     if (!json) {
@@ -80,6 +82,7 @@ oj::protocol::JudgeRequest deserialize_judge_request(const std::string& payload)
     return request;
 }
 
+// 将判题结果编码成便于回传和持久化的 JSON 结构。
 std::string serialize_judge_response(const oj::protocol::JudgeResponse& response) {
     crow::json::wvalue body;
     body["submission_id"] = response.submission_id;
@@ -107,6 +110,7 @@ std::string serialize_judge_response(const oj::protocol::JudgeResponse& response
     return body.dump();
 }
 
+// 解析 judge_worker 返回的 JSON，并恢复编译信息与测试点结果明细。
 oj::protocol::JudgeResponse deserialize_judge_response(const std::string& payload) {
     const auto json = crow::json::load(payload);
     if (!json) {

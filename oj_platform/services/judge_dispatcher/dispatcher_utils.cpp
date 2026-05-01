@@ -45,6 +45,7 @@ void mark_submission_system_error(oj::common::SubmissionResult& record,
     record.detail = build_worker_failure_detail(system_message);
 }
 
+// 将环境变量中的多个 worker 地址解析成调度器可直接使用的端点列表。
 std::vector<oj::common::JudgeWorkerEndpoint> parse_worker_endpoints(const std::string& text) {
     std::vector<oj::common::JudgeWorkerEndpoint> endpoints;
     static std::deque<std::string> host_storage;
@@ -88,6 +89,7 @@ std::vector<oj::common::JudgeWorkerEndpoint> parse_worker_endpoints(const std::s
     return endpoints;
 }
 
+// 同时兼容组合配置和编号配置，并在缺省时补上默认 worker 端点。
 std::vector<oj::common::JudgeWorkerEndpoint> parse_worker_endpoints_from_env() {
     std::vector<oj::common::JudgeWorkerEndpoint> endpoints;
 
@@ -125,6 +127,7 @@ RoundRobinSelector::RoundRobinSelector(std::vector<oj::common::JudgeWorkerEndpoi
     }
 }
 
+// 以轮询方式返回下一个 worker，尽量让请求在多实例之间均匀分布。
 const oj::common::JudgeWorkerEndpoint& RoundRobinSelector::next() {
     const auto index = next_index_ % endpoints_.size();
     ++next_index_;

@@ -59,6 +59,7 @@ function renderCaseDetailRow(label, value) {
   `;
 }
 
+// 拉取当前提交详情，并在未登录时交给鉴权模块接管页面流程。
 async function fetchSubmission() {
   await window.ojAuth.initAuth();
   if (!window.ojAuth.protectPage()) {
@@ -70,6 +71,7 @@ async function fetchSubmission() {
   return response.json();
 }
 
+// 把一次提交的总体状态、编译输出和逐点评测结果渲染到详情页面上。
 function renderSubmission(data) {
   document.getElementById('summary').innerHTML = `
 提交号: ${data.submission_id}\n
@@ -119,6 +121,7 @@ function renderSubmission(data) {
   });
 }
 
+// 在提交未结束前持续轮询状态，让详情页自动刷新到最终判题结果。
 async function loadSubmission() {
   const hint = document.getElementById('polling-hint');
   while (true) {
