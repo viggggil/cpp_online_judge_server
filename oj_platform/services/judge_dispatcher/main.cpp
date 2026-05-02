@@ -97,7 +97,16 @@ void process_task(dispatcher::WorkerPool& worker_pool, const std::string& payloa
     judge_request.source_code = source_code;
     judge_request.time_limit_ms = detail->time_limit_ms;
     judge_request.memory_limit_mb = detail->memory_limit_mb;
-    judge_request.test_cases = repository.load_test_cases(problem_id);
+    for (const auto& ref : repository.load_test_case_refs(problem_id)) {
+        oj::protocol::TestCase test_case;
+        test_case.input_object_key = ref.input_object_key;
+        test_case.output_object_key = ref.output_object_key;
+        test_case.input_sha256 = ref.input_sha256;
+        test_case.output_sha256 = ref.output_sha256;
+        test_case.input_size_bytes = ref.input_size_bytes;
+        test_case.output_size_bytes = ref.output_size_bytes;
+        judge_request.test_cases.push_back(std::move(test_case));
+    }
 
     try {
         record.judge_response = worker_pool.judge(judge_request);

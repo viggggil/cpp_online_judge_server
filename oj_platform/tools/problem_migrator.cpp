@@ -1,4 +1,5 @@
 #include "common/path_utils.h"
+#include "common/object_storage_client.h"
 #include "services/oj_server/mysql_client.h"
 
 #include <crow/json.h>
@@ -22,21 +23,11 @@ std::filesystem::path resolve_problem_root(std::filesystem::path root) {
     return oj::common::resolve_project_path(std::move(root));
 }
 
-std::string read_text_file(const std::filesystem::path& path) {
-    std::ifstream input(path, std::ios::in | std::ios::binary);
-    if (!input) {
-        throw std::runtime_error("failed to open file: " + path.string());
-    }
-    std::ostringstream buffer;
-    buffer << input.rdbuf();
-    return buffer.str();
-}
-
 std::optional<crow::json::rvalue> load_json_file(const std::filesystem::path& path) {
     if (!std::filesystem::exists(path)) {
         return std::nullopt;
     }
-    auto json = crow::json::load(read_text_file(path));
+    auto json = crow::json::load(oj::common::read_text_file(path));
     if (!json) {
         throw std::runtime_error("invalid json file: " + path.string());
     }
@@ -61,8 +52,10 @@ void migrate_problem(sql::Connection& connection, const std::filesystem::path& p
     const auto time_limit_ms = meta.has("time_limit_ms") ? meta["time_limit_ms"].i() : 1000;
     const auto memory_limit_mb = meta.has("memory_limit_mb") ? meta["memory_limit_mb"].i() : 128;
     const auto statement_path = problem_dir / "statement_zh.md";
-    const auto statement_text = std::filesystem::exists(statement_path) ? read_text_file(statement_path) : std::string{};
+    const auto statement_text = std::filesystem::exists(statement_path) ? oj::common::read_text_file(statement_path) : std::string{};
     const auto now = unix_now();
+    const oj::common::ObjectStorageClient storage_client;
+    const auto batch_prefix = "migrated/" + std::to_string(problem_id);
 
     {
         auto stmt = std::unique_ptr<sql::PreparedStatement>{
@@ -118,7 +111,10 @@ void migrate_problem(sql::Connection& connection, const std::filesystem::path& p
 
         auto insert_stmt = std::unique_ptr<sql::PreparedStatement>{
             connection.prepareStatement(
-                "INSERT INTO problem_testcases (problem_id, case_no, input_data, expected_output, is_sample) VALUES (?, ?, ?, ?, ?)")};
+                "INSERT INTO problem_testcases "
+                "(problem_id, case_no, input_object_key, output_object_key, "
+                "input_sha256, output_sha256, input_size_bytes, output_size_bytes, is_sample) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")};
 
         const auto tests_dir = problem_dir / "tests";
         for (std::size_t index = 1;; ++index) {
@@ -128,11 +124,21 @@ void migrate_problem(sql::Connection& connection, const std::filesystem::path& p
                 break;
             }
 
+            const auto input_object_key = batch_prefix + "/case_" + std::to_string(index) + ".in";
+            const auto output_object_key = batch_prefix + "/case_" + std::to_string(index) + ".out";
+
+            storage_client.upload_file(in_path, input_object_key);
+            storage_client.upload_file(out_path, output_object_key);
+
             insert_stmt->setInt64(1, problem_id);
             insert_stmt->setInt(2, static_cast<int>(index));
-            insert_stmt->setString(3, read_text_file(in_path));
-            insert_stmt->setString(4, read_text_file(out_path));
-            insert_stmt->setBoolean(5, index <= 2);
+            insert_stmt->setString(3, input_object_key);
+            insert_stmt->setString(4, output_object_key);
+            insert_stmt->setString(5, oj::common::sha256_file(in_path));
+            insert_stmt->setString(6, oj::common::sha256_file(out_path));
+            insert_stmt->setInt64(7, oj::common::file_size_bytes(in_path));
+            insert_stmt->setInt64(8, oj::common::file_size_bytes(out_path));
+            insert_stmt->setBoolean(9, index <= 2);
             insert_stmt->executeUpdate();
         }
     }

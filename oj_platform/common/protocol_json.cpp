@@ -45,6 +45,12 @@ std::string serialize_judge_request(const oj::protocol::JudgeRequest& request) {
         crow::json::wvalue item;
         item["input"] = test_case.input;
         item["expected_output"] = test_case.expected_output;
+        item["input_object_key"] = test_case.input_object_key;
+        item["output_object_key"] = test_case.output_object_key;
+        item["input_sha256"] = test_case.input_sha256;
+        item["output_sha256"] = test_case.output_sha256;
+        item["input_size_bytes"] = test_case.input_size_bytes;
+        item["output_size_bytes"] = test_case.output_size_bytes;
         items.push_back(std::move(item));
     }
     body["test_cases"] = std::move(items);
@@ -75,6 +81,24 @@ oj::protocol::JudgeRequest deserialize_judge_request(const std::string& payload)
             }
             if (item.has("expected_output")) {
                 test_case.expected_output = item["expected_output"].s();
+            }
+            if (item.has("input_object_key")) {
+                test_case.input_object_key = item["input_object_key"].s();
+            }
+            if (item.has("output_object_key")) {
+                test_case.output_object_key = item["output_object_key"].s();
+            }
+            if (item.has("input_sha256")) {
+                test_case.input_sha256 = item["input_sha256"].s();
+            }
+            if (item.has("output_sha256")) {
+                test_case.output_sha256 = item["output_sha256"].s();
+            }
+            if (item.has("input_size_bytes")) {
+                test_case.input_size_bytes = item["input_size_bytes"].i();
+            }
+            if (item.has("output_size_bytes")) {
+                test_case.output_size_bytes = item["output_size_bytes"].i();
             }
             request.test_cases.push_back(std::move(test_case));
         }

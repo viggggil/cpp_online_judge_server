@@ -1,4 +1,5 @@
 #include "services/oj_server/problem_importer.h"
+#include "common/object_storage_client.h"
 
 #include <algorithm>
 #include <chrono>
@@ -15,7 +16,6 @@
 
 namespace oj::server {
 namespace {
-
 std::string trim(const std::string& value) {
     std::size_t begin = 0;
     while (begin < value.size() &&
@@ -433,16 +433,40 @@ std::vector<ImportedProblem::TestCase> load_testcases(
     std::vector<ImportedProblem::TestCase> testcases;
     testcases.reserve(input_files.size());
 
-    for (const auto& [case_no, input_path] : input_files) {
-        const auto output_path = output_files.at(case_no);
+    const oj::common::ObjectStorageClient storage_client;
+    const auto batch_prefix = "imports/" + random_suffix();
+    std::vector<std::string> uploaded_object_keys;
 
-        ImportedProblem::TestCase testcase;
-        testcase.case_no = case_no;
-        testcase.input_data = read_text_file(input_path);
-        testcase.expected_output = read_text_file(output_path);
-        testcase.is_sample = case_no <= sample_count;
+    try {
+        for (const auto& [case_no, input_path] : input_files) {
+            const auto output_path = output_files.at(case_no);
 
-        testcases.push_back(std::move(testcase));
+            ImportedProblem::TestCase testcase;
+            testcase.case_no = case_no;
+            testcase.is_sample = case_no <= sample_count;
+            testcase.input_sha256 = oj::common::sha256_file(input_path);
+            testcase.output_sha256 = oj::common::sha256_file(output_path);
+            testcase.input_size_bytes = oj::common::file_size_bytes(input_path);
+            testcase.output_size_bytes = oj::common::file_size_bytes(output_path);
+            testcase.input_object_key = batch_prefix + "/case_" + std::to_string(case_no) + ".in";
+            testcase.output_object_key = batch_prefix + "/case_" + std::to_string(case_no) + ".out";
+
+            storage_client.upload_file(input_path, testcase.input_object_key);
+            uploaded_object_keys.push_back(testcase.input_object_key);
+
+            storage_client.upload_file(output_path, testcase.output_object_key);
+            uploaded_object_keys.push_back(testcase.output_object_key);
+
+            testcases.push_back(std::move(testcase));
+        }
+    } catch (...) {
+        for (const auto& object_key : uploaded_object_keys) {
+            try {
+                storage_client.delete_object(object_key);
+            } catch (...) {
+            }
+        }
+        throw;
     }
 
     std::sort(testcases.begin(), testcases.end(), [](const auto& lhs, const auto& rhs) {

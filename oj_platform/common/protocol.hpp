@@ -63,6 +63,15 @@ inline constexpr std::string_view to_string(LanguageType language) noexcept {
 struct TestCase {
     std::string input;
     std::string expected_output;
+
+    std::string input_object_key;
+    std::string output_object_key;
+
+    std::string input_sha256;
+    std::string output_sha256;
+
+    std::int64_t input_size_bytes{0};
+    std::int64_t output_size_bytes{0};
 };
 
 // 单个测试点的执行结果，由 Worker 返回。

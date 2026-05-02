@@ -14,8 +14,16 @@ namespace oj::server {
 struct ImportedProblem {
     struct TestCase {
         int case_no{};
-        std::string input_data;
-        std::string expected_output;
+
+        std::string input_object_key;
+        std::string output_object_key;
+
+        std::string input_sha256;
+        std::string output_sha256;
+
+        std::int64_t input_size_bytes{};
+        std::int64_t output_size_bytes{};
+
         bool is_sample{false};
     };
 
@@ -27,6 +35,20 @@ struct ImportedProblem {
     std::string statement_markdown;
     std::vector<std::string> tags;
     std::vector<TestCase> testcases;
+};
+
+
+struct TestCaseObjectRef {
+    int case_no{};
+
+    std::string input_object_key;
+    std::string output_object_key;
+
+    std::string input_sha256;
+    std::string output_sha256;
+
+    std::int64_t input_size_bytes{};
+    std::int64_t output_size_bytes{};
 };
 
 class ProblemRepository {
@@ -49,7 +71,7 @@ public:
     std::vector<oj::common::ProblemSummary> list() const;
     std::vector<oj::protocol::ProblemMeta> list_problem_meta() const;
     std::optional<oj::protocol::ProblemDetail> find_detail(std::int64_t problem_id) const;
-    std::vector<oj::protocol::TestCase> load_test_cases(std::int64_t problem_id) const;
+    std::vector<TestCaseObjectRef> load_test_case_refs(std::int64_t problem_id) const;
 
 private:
     MySqlClient mysql_client_;

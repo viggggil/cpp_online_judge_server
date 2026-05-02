@@ -110,6 +110,38 @@ TEST(JudgeCoreTest, RequestTestCasesTakePrecedenceOverProblemDirectoryFixtures) 
     EXPECT_EQ(response.test_case_results[0].actual_output, "3\n");
 }
 
+TEST(JudgeCoreTest, ObjectStorageBackedTestCasesCanBeReadFromLocalCacheFiles) {
+    TempDirectory temp_directory;
+    ScopedCurrentPath scoped_path{temp_directory.path()};
+
+    const auto cache_directory = temp_directory.path() / "runtime" / "judge_worker" / "object_cache";
+    const auto input_path = cache_directory / "sha-in.in";
+    const auto output_path = cache_directory / "sha-out.out";
+    write_text_file(input_path, "8 9\n");
+    write_text_file(output_path, "17\n");
+
+    auto request = make_sum_request(3, 616161);
+    request.test_cases = {{
+        "",
+        "",
+        "objects/case_1.in",
+        "objects/case_1.out",
+        "sha-in",
+        "sha-out",
+        4,
+        3,
+    }};
+
+    oj::worker::JudgeCore judge_core;
+    const auto response = judge_core.judge(request);
+
+    EXPECT_EQ(response.final_status, oj::protocol::JudgeStatus::ok);
+    ASSERT_EQ(response.test_case_results.size(), 1u);
+    EXPECT_EQ(response.test_case_results[0].input, "8 9\n");
+    EXPECT_EQ(response.test_case_results[0].expected_output, "17\n");
+    EXPECT_EQ(response.test_case_results[0].actual_output, "17\n");
+}
+
 TEST(JudgeCoreTest, ProblemDirectoryIsUsedAsLegacyFallbackWhenRequestHasNoTestCases) {
     TempDirectory temp_directory;
     ScopedCurrentPath scoped_path{temp_directory.path()};

@@ -60,4 +60,13 @@ struct JudgeWorkerEndpoint {
     int read_timeout_ms{30000};
 };
 
+struct ObjectStorageConfig {
+    const char* endpoint{env_or_default("OJ_OBJECT_STORAGE_ENDPOINT", "http://minio:9000")};
+    const char* access_key{env_or_default("OJ_OBJECT_STORAGE_ACCESS_KEY", "minioadmin")};
+    const char* secret_key{env_or_default("OJ_OBJECT_STORAGE_SECRET_KEY", "minioadmin123")};
+    const char* bucket{env_or_default("OJ_OBJECT_STORAGE_BUCKET", "oj-testdata")};
+    const char* alias{env_or_default("OJ_OBJECT_STORAGE_ALIAS", "ojminio")};
+};
+
+
 } // namespace oj::common

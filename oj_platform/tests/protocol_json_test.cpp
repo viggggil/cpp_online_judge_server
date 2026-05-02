@@ -12,7 +12,10 @@ TEST(ProtocolJsonTest, JudgeRequestSerializeDeserializeRoundTrip) {
     request.source_code = "#include <iostream>\nint main(){std::cout<<42<<'\\n';}";
     request.time_limit_ms = 1500;
     request.memory_limit_mb = 256;
-    request.test_cases = {{"1 2\n", "3\n"}, {"2 5\n", "7\n"}};
+    request.test_cases = {
+        {"1 2\n", "3\n", "objects/1.in", "objects/1.out", "sha-in-1", "sha-out-1", 4, 2},
+        {"2 5\n", "7\n", "objects/2.in", "objects/2.out", "sha-in-2", "sha-out-2", 4, 2},
+    };
 
     const auto json = oj::common::serialize_judge_request(request);
     const auto parsed = oj::common::deserialize_judge_request(json);
@@ -26,8 +29,16 @@ TEST(ProtocolJsonTest, JudgeRequestSerializeDeserializeRoundTrip) {
     ASSERT_EQ(parsed.test_cases.size(), request.test_cases.size());
     EXPECT_EQ(parsed.test_cases[0].input, "1 2\n");
     EXPECT_EQ(parsed.test_cases[0].expected_output, "3\n");
+    EXPECT_EQ(parsed.test_cases[0].input_object_key, "objects/1.in");
+    EXPECT_EQ(parsed.test_cases[0].output_object_key, "objects/1.out");
+    EXPECT_EQ(parsed.test_cases[0].input_sha256, "sha-in-1");
+    EXPECT_EQ(parsed.test_cases[0].output_sha256, "sha-out-1");
+    EXPECT_EQ(parsed.test_cases[0].input_size_bytes, 4);
+    EXPECT_EQ(parsed.test_cases[0].output_size_bytes, 2);
     EXPECT_EQ(parsed.test_cases[1].input, "2 5\n");
     EXPECT_EQ(parsed.test_cases[1].expected_output, "7\n");
+    EXPECT_EQ(parsed.test_cases[1].input_object_key, "objects/2.in");
+    EXPECT_EQ(parsed.test_cases[1].output_object_key, "objects/2.out");
 }
 
 TEST(ProtocolJsonTest, JudgeResponseSerializeDeserializeRoundTrip) {

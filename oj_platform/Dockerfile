@@ -15,6 +15,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libmysqlcppconn-dev \
     && rm -rf /var/lib/apt/lists/*
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    unzip \
+    libssl3 \
+    libcrypt1 \
+    libhiredis1.1.0 \
+    libmysqlcppconn7t64 \
+    g++ \
+    && curl -L https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc \
+    && chmod +x /usr/local/bin/mc \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN git clone --depth 1 https://github.com/sewenew/redis-plus-plus.git /tmp/redis-plus-plus \
     && cmake -S /tmp/redis-plus-plus -B /tmp/redis-plus-plus/build \
         -DCMAKE_BUILD_TYPE=Release \
@@ -44,10 +57,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libhiredis1.1.0 \
     libmysqlcppconn7t64 \
     g++ \
+    curl \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/lib/libredis++.so* /usr/local/lib/
+COPY --from=builder /usr/local/bin/mc /usr/local/bin/mc
 RUN ldconfig
 
 WORKDIR /app

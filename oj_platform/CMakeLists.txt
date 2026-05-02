@@ -23,6 +23,13 @@ endif()
 
 add_subdirectory(third_party/crow)
 
+add_library(oj_object_storage
+    common/object_storage_client.cpp
+)
+
+target_include_directories(oj_object_storage PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(oj_object_storage PUBLIC Crow::Crow)
+
 add_library(oj_judge_core
     common/protocol_json.cpp
     common/path_utils.cpp
@@ -33,7 +40,7 @@ add_library(oj_judge_core
 )
 
 target_include_directories(oj_judge_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(oj_judge_core PUBLIC Crow::Crow)
+target_link_libraries(oj_judge_core PUBLIC Crow::Crow oj_object_storage)
 
 add_executable(oj_server
     services/oj_server/main.cpp
@@ -48,7 +55,7 @@ add_executable(oj_server
 )
 
 target_include_directories(oj_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MYSQLCPP_INCLUDE_DIR})
-target_link_libraries(oj_server PRIVATE Crow::Crow oj_judge_core redis++::redis++ hiredis::hiredis OpenSSL::Crypto crypt ${MYSQLCPP_LIBRARY})
+target_link_libraries(oj_server PRIVATE Crow::Crow oj_judge_core oj_object_storage redis++::redis++ hiredis::hiredis OpenSSL::Crypto crypt ${MYSQLCPP_LIBRARY})
 
 add_executable(judge_worker
     services/judge_worker/main.cpp
@@ -69,7 +76,7 @@ add_executable(judge_dispatcher
 )
 
 target_include_directories(judge_dispatcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MYSQLCPP_INCLUDE_DIR})
-target_link_libraries(judge_dispatcher PRIVATE Crow::Crow oj_judge_core redis++::redis++ hiredis::hiredis ${MYSQLCPP_LIBRARY})
+target_link_libraries(judge_dispatcher PRIVATE Crow::Crow oj_judge_core oj_object_storage redis++::redis++ hiredis::hiredis ${MYSQLCPP_LIBRARY})
 
 add_executable(problem_migrator
     tools/problem_migrator.cpp
@@ -78,7 +85,7 @@ add_executable(problem_migrator
 )
 
 target_include_directories(problem_migrator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MYSQLCPP_INCLUDE_DIR})
-target_link_libraries(problem_migrator PRIVATE Crow::Crow ${MYSQLCPP_LIBRARY})
+target_link_libraries(problem_migrator PRIVATE Crow::Crow oj_object_storage ${MYSQLCPP_LIBRARY})
 
 if(OJ_PLATFORM_BUILD_TESTS)
     include(FetchContent)
@@ -104,7 +111,7 @@ if(OJ_PLATFORM_BUILD_TESTS)
         services/judge_worker/judge_summary.cpp
     )
     target_include_directories(oj_platform_unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(oj_platform_unit_tests PRIVATE Crow::Crow GTest::gtest_main)
+    target_link_libraries(oj_platform_unit_tests PRIVATE Crow::Crow oj_object_storage GTest::gtest_main)
 
     include(GoogleTest)
     gtest_discover_tests(oj_platform_unit_tests)

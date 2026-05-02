@@ -1,5 +1,7 @@
 #include "services/oj_server/problem_repository.h"
 
+#include "common/object_storage_client.h"
+
 #include <cppconn/prepared_statement.h>
 #include <cppconn/resultset.h>
 
@@ -174,21 +176,27 @@ std::optional<oj::protocol::ProblemDetail> ProblemRepository::find_detail(std::i
     return detail;
 }
 
-// 按测试点编号顺序从数据库恢复判题所需的输入输出数据。
-std::vector<oj::protocol::TestCase> ProblemRepository::load_test_cases(std::int64_t problem_id) const {
+// 按测试点编号顺序从数据库恢复对象存储引用和校验元数据。
+std::vector<TestCaseObjectRef> ProblemRepository::load_test_case_refs(std::int64_t problem_id) const {
     auto connection = mysql_client_.create_connection();
     auto statement = std::unique_ptr<sql::PreparedStatement>{
         connection->prepareStatement(
-            "SELECT input_data, expected_output "
+            "SELECT case_no, input_object_key, output_object_key, "
+            "input_sha256, output_sha256, input_size_bytes, output_size_bytes "
             "FROM problem_testcases WHERE problem_id = ? ORDER BY case_no ASC")};
     statement->setInt64(1, problem_id);
     auto rows = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
 
-    std::vector<oj::protocol::TestCase> test_cases;
+    std::vector<TestCaseObjectRef> test_cases;
     while (rows->next()) {
-        oj::protocol::TestCase test_case;
-        test_case.input = rows->getString("input_data");
-        test_case.expected_output = rows->getString("expected_output");
+        TestCaseObjectRef test_case;
+        test_case.case_no = rows->getInt("case_no");
+        test_case.input_object_key = rows->getString("input_object_key");
+        test_case.output_object_key = rows->getString("output_object_key");
+        test_case.input_sha256 = rows->getString("input_sha256");
+        test_case.output_sha256 = rows->getString("output_sha256");
+        test_case.input_size_bytes = rows->getInt64("input_size_bytes");
+        test_case.output_size_bytes = rows->getInt64("output_size_bytes");
         test_cases.push_back(std::move(test_case));
     }
     return test_cases;
@@ -278,6 +286,7 @@ std::int64_t ProblemRepository::allocate_problem_id(std::int64_t start_id) const
 // 在一个事务中导入题目主信息、题面、标签和测试点，保证导入结果一致。
 void ProblemRepository::import_problem(const ImportedProblem& problem) const {
     auto connection = mysql_client_.create_connection();
+    oj::common::ObjectStorageClient storage_client;
     try {
         connection->setAutoCommit(false);
 
@@ -323,18 +332,24 @@ void ProblemRepository::import_problem(const ImportedProblem& problem) const {
             auto statement = std::unique_ptr<sql::PreparedStatement>{
                 connection->prepareStatement(
                     "INSERT INTO problem_testcases "
-                    "(problem_id, case_no, input_data, expected_output, is_sample) "
-                    "VALUES (?, ?, ?, ?, ?)")
+                    "(problem_id, case_no, "
+                    "input_object_key, output_object_key, "
+                    "input_sha256, output_sha256, "
+                    "input_size_bytes, output_size_bytes, "
+                    "is_sample) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
             };
-
             statement->setInt64(1, problem.id);
             statement->setInt(2, tc.case_no);
-            statement->setString(3, tc.input_data);
-            statement->setString(4, tc.expected_output);
-            statement->setBoolean(5, tc.is_sample);
+            statement->setString(3, tc.input_object_key);
+            statement->setString(4, tc.output_object_key);
+            statement->setString(5, tc.input_sha256);
+            statement->setString(6, tc.output_sha256);
+            statement->setInt64(7, tc.input_size_bytes);
+            statement->setInt64(8, tc.output_size_bytes);
+            statement->setBoolean(9, tc.is_sample);
             statement->executeUpdate();
         }
-
         connection->commit();
         connection->setAutoCommit(true);
     } catch (...) {
@@ -342,6 +357,17 @@ void ProblemRepository::import_problem(const ImportedProblem& problem) const {
             connection->rollback();
             connection->setAutoCommit(true);
         } catch (...) {
+        }
+        for (const auto& tc : problem.testcases) {
+            try {
+                if (!tc.input_object_key.empty()) {
+                    storage_client.delete_object(tc.input_object_key);
+                }
+                if (!tc.output_object_key.empty()) {
+                    storage_client.delete_object(tc.output_object_key);
+                }
+            } catch (...) {
+            }
         }
         throw;
     }

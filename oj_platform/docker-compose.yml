@@ -34,6 +34,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+  minio:
+    image: minio/minio:latest
+    container_name: oj_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
 
   oj_server:
     build:
@@ -47,6 +59,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_started
     environment:
       TZ: Asia/Shanghai
       OJ_SERVER_PORT: 18080
@@ -58,6 +72,10 @@ services:
       OJ_REDIS_HOST: redis
       OJ_REDIS_PORT: 6379
       OJ_ADMIN_REGISTER_CODE: admin123456
+      OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OJ_OBJECT_STORAGE_ACCESS_KEY: minioadmin
+      OJ_OBJECT_STORAGE_SECRET_KEY: minioadmin123
+      OJ_OBJECT_STORAGE_BUCKET: oj-testdata
     ports:
       - "8080:18080"
 
@@ -73,6 +91,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_started
       judge_worker_1:
         condition: service_started
       judge_worker_2:
@@ -91,6 +111,10 @@ services:
       OJ_JUDGE_WORKER_1: judge_worker_1:18081/api/judge
       OJ_JUDGE_WORKER_2: judge_worker_2:18081/api/judge
       OJ_JUDGE_WORKER_3: judge_worker_3:18081/api/judge
+      OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OJ_OBJECT_STORAGE_ACCESS_KEY: minioadmin
+      OJ_OBJECT_STORAGE_SECRET_KEY: minioadmin123
+      OJ_OBJECT_STORAGE_BUCKET: oj-testdata
 
   judge_worker_1:
     build:
@@ -102,6 +126,10 @@ services:
     environment:
       TZ: Asia/Shanghai
       OJ_JUDGE_WORKER_PORT: 18081
+      OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OJ_OBJECT_STORAGE_ACCESS_KEY: minioadmin
+      OJ_OBJECT_STORAGE_SECRET_KEY: minioadmin123
+      OJ_OBJECT_STORAGE_BUCKET: oj-testdata
 
   judge_worker_2:
     build:
@@ -113,6 +141,10 @@ services:
     environment:
       TZ: Asia/Shanghai
       OJ_JUDGE_WORKER_PORT: 18081
+      OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OJ_OBJECT_STORAGE_ACCESS_KEY: minioadmin
+      OJ_OBJECT_STORAGE_SECRET_KEY: minioadmin123
+      OJ_OBJECT_STORAGE_BUCKET: oj-testdata
 
   judge_worker_3:
     build:
@@ -124,7 +156,12 @@ services:
     environment:
       TZ: Asia/Shanghai
       OJ_JUDGE_WORKER_PORT: 18081
+      OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OJ_OBJECT_STORAGE_ACCESS_KEY: minioadmin
+      OJ_OBJECT_STORAGE_SECRET_KEY: minioadmin123
+      OJ_OBJECT_STORAGE_BUCKET: oj-testdata
 
 volumes:
   mysql_data:
   redis_data:
+  minio_data:

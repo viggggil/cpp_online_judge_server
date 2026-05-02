@@ -1,5 +1,6 @@
 #include "services/judge_worker/judge_core.h"
 
+#include "common/object_storage_client.h"
 #include "services/judge_worker/compile_service.h"
 #include "services/judge_worker/run_service.h"
 #include "services/judge_worker/judge_summary.h"
@@ -20,6 +21,17 @@ std::string read_text_file_if_exists(const std::filesystem::path& file_path) {
     std::ifstream input(file_path, std::ios::in | std::ios::binary);
     if (!input) {
         return {};
+    }
+
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+    return buffer.str();
+}
+
+std::string read_text_file(const std::filesystem::path& file_path) {
+    std::ifstream input(file_path, std::ios::in | std::ios::binary);
+    if (!input) {
+        throw std::runtime_error("failed to open file: " + file_path.string());
     }
 
     std::ostringstream buffer;
@@ -49,6 +61,89 @@ std::vector<oj::protocol::TestCase> load_test_cases_from_problem_directory(std::
     }
 
     return test_cases;
+}
+
+void verify_cached_file(const std::filesystem::path& file_path,
+                        const std::string& expected_sha256,
+                        std::int64_t expected_size_bytes) {
+    if (expected_size_bytes > 0) {
+        const auto actual_size = oj::common::file_size_bytes(file_path);
+        if (actual_size != expected_size_bytes) {
+            throw std::runtime_error(
+                "cached file size mismatch: " + file_path.string());
+        }
+    }
+
+    if (!expected_sha256.empty()) {
+        const auto actual_sha256 = oj::common::sha256_file(file_path);
+        if (actual_sha256 != expected_sha256) {
+            throw std::runtime_error(
+                "cached file sha256 mismatch: " + file_path.string());
+        }
+    }
+}
+
+void ensure_cached_object(const oj::common::ObjectStorageClient& storage_client,
+                          const std::string& object_key,
+                          const std::filesystem::path& cache_path,
+                          const std::string& expected_sha256,
+                          std::int64_t expected_size_bytes) {
+    auto try_verify = [&]() {
+        if (!std::filesystem::exists(cache_path)) {
+            return false;
+        }
+        verify_cached_file(cache_path, expected_sha256, expected_size_bytes);
+        return true;
+    };
+
+    try {
+        if (try_verify()) {
+            return;
+        }
+    } catch (...) {
+        std::error_code ignored;
+        std::filesystem::remove(cache_path, ignored);
+    }
+
+    storage_client.download_file(object_key, cache_path);
+    verify_cached_file(cache_path, expected_sha256, expected_size_bytes);
+}
+
+oj::protocol::TestCase materialize_test_case_from_object_storage(
+    const oj::protocol::TestCase& testcase_ref,
+    const std::filesystem::path& cache_directory,
+    std::size_t case_index) {
+    oj::common::ObjectStorageClient storage_client;
+    oj::protocol::TestCase materialized = testcase_ref;
+
+    const auto input_cache_path = cache_directory /
+        (testcase_ref.input_sha256.empty()
+             ? ("case_" + std::to_string(case_index + 1) + ".in")
+             : (testcase_ref.input_sha256 + ".in"));
+    const auto output_cache_path = cache_directory /
+        (testcase_ref.output_sha256.empty()
+             ? ("case_" + std::to_string(case_index + 1) + ".out")
+             : (testcase_ref.output_sha256 + ".out"));
+
+    if (!materialized.input_object_key.empty()) {
+        ensure_cached_object(storage_client,
+                             materialized.input_object_key,
+                             input_cache_path,
+                             materialized.input_sha256,
+                             materialized.input_size_bytes);
+        materialized.input = read_text_file(input_cache_path);
+    }
+
+    if (!materialized.output_object_key.empty()) {
+        ensure_cached_object(storage_client,
+                             materialized.output_object_key,
+                             output_cache_path,
+                             materialized.output_sha256,
+                             materialized.output_size_bytes);
+        materialized.expected_output = read_text_file(output_cache_path);
+    }
+
+    return materialized;
 }
 
 } // namespace
@@ -90,7 +185,14 @@ oj::protocol::JudgeResponse JudgeCore::judge(const oj::protocol::JudgeRequest& r
             effective_test_cases = &fallback_test_cases;
         }
 
-        for (const auto& test_case : *effective_test_cases) {
+        const auto test_cache_directory = std::filesystem::path{"runtime"} / "judge_worker" / "object_cache";
+        std::filesystem::create_directories(test_cache_directory);
+
+        for (std::size_t index = 0; index < effective_test_cases->size(); ++index) {
+            const auto test_case = materialize_test_case_from_object_storage(
+                (*effective_test_cases)[index],
+                test_cache_directory,
+                index);
             response.test_case_results.push_back(
                 run_single_testcase(compile_result.executable_path,
                                     work_directory,
