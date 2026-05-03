@@ -36,6 +36,16 @@ function setStatus(message, isError = false) {
   node.classList.toggle('status-ok', !isError && Boolean(message));
 }
 
+function setAppendTestcaseStatus(message, isError = false) {
+  const node = document.getElementById('append-testcase-message');
+  if (!node) {
+    return;
+  }
+  node.textContent = message;
+  node.classList.toggle('status-bad', isError);
+  node.classList.toggle('status-ok', !isError && Boolean(message));
+}
+
 // 从后台加载题面 Markdown，并同步刷新编辑器与预览区域。
 async function loadStatement(problemId) {
   const response = await window.ojAuth.authFetch(`/api/admin/problems/${problemId}/statement`);
@@ -186,6 +196,49 @@ async function deleteProblem(problemId) {
   }
 }
 
+async function appendTestcaseFile(problemId) {
+  const input = document.getElementById('testcase-file-input');
+  const file = input.files?.[0];
+
+  if (!file) {
+    setAppendTestcaseStatus('请先选择一个测试数据文件', true);
+    return;
+  }
+
+  const normalizedName = file.name.toLowerCase();
+  if (!/^\d+\.(in|out)$/.test(normalizedName)) {
+    setAppendTestcaseStatus('文件名必须是数字.in 或 数字.out，例如 12.in', true);
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+
+  setButtonsDisabled(['append-testcase-btn'], true);
+  setAppendTestcaseStatus('正在上传测试数据文件...');
+
+  try {
+    const response = await window.ojAuth.authFetch(`/api/admin/problems/${problemId}/testcase-file`, {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || '上传测试数据文件失败');
+    }
+
+    const pairedMessage = data.paired
+      ? `测试点 ${data.case_no} 已补齐并写入系统`
+      : `已暂存 ${data.filename}，等待补齐另一侧文件`;
+    setAppendTestcaseStatus(data.message ? `${pairedMessage}\n${data.message}` : pairedMessage);
+    input.value = '';
+  } catch (error) {
+    setAppendTestcaseStatus(error.message || '上传测试数据文件失败', true);
+  } finally {
+    setButtonsDisabled(['append-testcase-btn'], false);
+  }
+}
+
 // 初始化题面编辑页，校验管理员身份并串起元信息、题面和交互事件的加载流程。
 async function initPage() {
   await window.ojAuth.initAuth();
@@ -210,6 +263,7 @@ async function initPage() {
   document.getElementById('save-btn').addEventListener('click', () => saveStatement(problemId));
   document.getElementById('update-title-btn').addEventListener('click', () => updateProblemTitle(problemId));
   document.getElementById('update-id-btn').addEventListener('click', () => updateProblemId(problemId));
+  document.getElementById('append-testcase-btn').addEventListener('click', () => appendTestcaseFile(problemId));
   document.getElementById('delete-problem-btn').addEventListener('click', () => deleteProblem(problemId));
   document.getElementById('statement-editor').addEventListener('input', updatePreview);
 

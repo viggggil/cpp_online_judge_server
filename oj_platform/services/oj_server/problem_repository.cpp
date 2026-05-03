@@ -2,6 +2,7 @@
 
 #include "common/object_storage_client.h"
 
+#include <cppconn/exception.h>
 #include <cppconn/prepared_statement.h>
 #include <cppconn/resultset.h>
 
@@ -228,6 +229,68 @@ std::optional<std::string> ProblemRepository::find_statement_markdown(
     }
 
     return static_cast<std::string>(result->getString("statement_markdown"));
+}
+
+bool ProblemRepository::testcase_exists(std::int64_t problem_id, int case_no) const {
+    if (case_no <= 0) {
+        return false;
+    }
+
+    auto connection = mysql_client_.create_connection();
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "SELECT id FROM problem_testcases WHERE problem_id = ? AND case_no = ?")
+    };
+    statement->setInt64(1, problem_id);
+    statement->setInt(2, case_no);
+
+    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+    return result->next();
+}
+
+void ProblemRepository::append_testcase(
+    std::int64_t problem_id,
+    const ImportedProblem::TestCase& testcase) const {
+    if (problem_id <= 0) {
+        throw std::runtime_error("problem id must be positive");
+    }
+    if (testcase.case_no <= 0) {
+        throw std::runtime_error("case_no must be positive");
+    }
+    if (testcase.input_object_key.empty() || testcase.output_object_key.empty()) {
+        throw std::runtime_error("testcase object keys cannot be empty");
+    }
+
+    auto connection = mysql_client_.create_connection();
+    if (!problem_exists(*connection, problem_id)) {
+        throw std::runtime_error("problem not found");
+    }
+
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "INSERT INTO problem_testcases "
+            "(problem_id, case_no, "
+            "input_object_key, output_object_key, "
+            "input_sha256, output_sha256, "
+            "input_size_bytes, output_size_bytes, "
+            "is_sample) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    };
+    statement->setInt64(1, problem_id);
+    statement->setInt(2, testcase.case_no);
+    statement->setString(3, testcase.input_object_key);
+    statement->setString(4, testcase.output_object_key);
+    statement->setString(5, testcase.input_sha256);
+    statement->setString(6, testcase.output_sha256);
+    statement->setInt64(7, testcase.input_size_bytes);
+    statement->setInt64(8, testcase.output_size_bytes);
+    statement->setBoolean(9, testcase.is_sample);
+
+    try {
+        statement->executeUpdate();
+    } catch (const sql::SQLException&) {
+        throw std::runtime_error("testcase already exists");
+    }
 }
 
 // 以 UPSERT 方式更新题面内容，避免后台编辑时拆成新增和修改两套流程。

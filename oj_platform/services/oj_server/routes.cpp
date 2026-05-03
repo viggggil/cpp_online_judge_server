@@ -52,6 +52,30 @@ crow::response json_error(int code, const std::string& message) {
     return crow::response{code, body};
 }
 
+std::optional<std::pair<std::string, std::string>> extract_uploaded_file(
+    const crow::request& req,
+    std::string* error_message = nullptr) {
+    try {
+        crow::multipart::message multipart(req);
+        const auto part = multipart.get_part_by_name("file");
+        const auto content_disposition = part.get_header_object("Content-Disposition");
+        const auto filename_it = content_disposition.params.find("filename");
+        if (filename_it == content_disposition.params.end()) {
+            if (error_message != nullptr) {
+                *error_message = "uploaded file must include filename";
+            }
+            return std::nullopt;
+        }
+
+        return std::make_pair(filename_it->second, part.body);
+    } catch (const std::exception& ex) {
+        if (error_message != nullptr) {
+            *error_message = ex.what();
+        }
+        return std::nullopt;
+    }
+}
+
 crow::json::wvalue make_auth_json(const std::string& token,
                                   const std::string& username,
                                   const std::string& role) {
@@ -569,6 +593,40 @@ void register_routes(crow::Crow<>& app) {
             body["problem_id"] = result.problem_id;
             body["title"] = result.title;
             body["testcase_count"] = result.testcase_count;
+            return crow::response{200, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+
+    CROW_ROUTE(app, "/api/admin/problems/<int>/testcase-file").methods(crow::HTTPMethod::POST)([](
+        const crow::request& req,
+        std::int64_t problem_id) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        std::string multipart_error;
+        const auto uploaded_file = extract_uploaded_file(req, &multipart_error);
+        if (!uploaded_file) {
+            return json_error(400, multipart_error.empty() ? "file upload is required" : multipart_error);
+        }
+
+        try {
+            ProblemImporter importer;
+            const auto result = importer.append_testcase_file_body(
+                problem_id,
+                uploaded_file->first,
+                uploaded_file->second);
+
+            crow::json::wvalue body;
+            body["ok"] = true;
+            body["problem_id"] = result.problem_id;
+            body["case_no"] = result.case_no;
+            body["filename"] = result.filename;
+            body["paired"] = result.paired;
+            body["message"] = result.message;
             return crow::response{200, body};
         } catch (const std::exception& ex) {
             return json_error(400, ex.what());
