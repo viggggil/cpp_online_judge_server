@@ -58,6 +58,76 @@ ProblemRepository::ProblemRepository()
 ProblemRepository::ProblemRepository(MySqlClient mysql_client)
     : mysql_client_(std::move(mysql_client)) {}
 
+// 创建一条不带测试点的题目记录，供后台手动出题入口使用。
+void ProblemRepository::create_problem(
+    std::int64_t problem_id,
+    const std::string& title,
+    int time_limit_ms,
+    int memory_limit_mb,
+    const std::string& statement_markdown) const {
+    if (problem_id <= 0) {
+        throw std::runtime_error("problem id must be positive");
+    }
+    if (title.empty()) {
+        throw std::runtime_error("title cannot be empty");
+    }
+    if (time_limit_ms <= 0) {
+        throw std::runtime_error("time_limit_ms must be positive");
+    }
+    if (memory_limit_mb <= 0) {
+        throw std::runtime_error("memory_limit_mb must be positive");
+    }
+    if (statement_markdown.empty()) {
+        throw std::runtime_error("statement_markdown cannot be empty");
+    }
+
+    auto connection = mysql_client_.create_connection();
+    if (problem_exists(*connection, problem_id)) {
+        throw std::runtime_error("problem id already exists");
+    }
+
+    try {
+        connection->setAutoCommit(false);
+
+        {
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "INSERT INTO problems "
+                    "(id, title, time_limit_ms, memory_limit_mb, checker_type, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP())")
+            };
+            statement->setInt64(1, problem_id);
+            statement->setString(2, title);
+            statement->setInt(3, time_limit_ms);
+            statement->setInt(4, memory_limit_mb);
+            statement->setString(5, "default");
+            statement->executeUpdate();
+        }
+
+        {
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "INSERT INTO problem_statements "
+                    "(problem_id, language, statement_markdown) "
+                    "VALUES (?, 'zh-CN', ?)")
+            };
+            statement->setInt64(1, problem_id);
+            statement->setString(2, statement_markdown);
+            statement->executeUpdate();
+        }
+
+        connection->commit();
+        connection->setAutoCommit(true);
+    } catch (...) {
+        try {
+            connection->rollback();
+            connection->setAutoCommit(true);
+        } catch (...) {
+        }
+        throw;
+    }
+}
+
 // 安全地修改题号，并保证旧题号存在且新题号不会与已有题目冲突。
 void ProblemRepository::update_problem_id(std::int64_t old_problem_id, std::int64_t new_problem_id) const {
     if (old_problem_id <= 0 || new_problem_id <= 0) {
@@ -109,6 +179,32 @@ void ProblemRepository::update_problem_title(std::int64_t problem_id, const std:
     statement->setString(1, title);
     statement->setInt64(2, std::time(nullptr));
     statement->setInt64(3, problem_id);
+    if (statement->executeUpdate() == 0) {
+        throw std::runtime_error("problem not found");
+    }
+}
+
+// 更新题目的时间限制和空间限制，并同步刷新更新时间。
+void ProblemRepository::update_problem_limits(
+    std::int64_t problem_id,
+    int time_limit_ms,
+    int memory_limit_mb) const {
+    if (time_limit_ms <= 0) {
+        throw std::runtime_error("time_limit_ms must be positive");
+    }
+    if (memory_limit_mb <= 0) {
+        throw std::runtime_error("memory_limit_mb must be positive");
+    }
+
+    auto connection = mysql_client_.create_connection();
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "UPDATE problems SET time_limit_ms = ?, memory_limit_mb = ?, updated_at = ? WHERE id = ?")
+    };
+    statement->setInt(1, time_limit_ms);
+    statement->setInt(2, memory_limit_mb);
+    statement->setInt64(3, std::time(nullptr));
+    statement->setInt64(4, problem_id);
     if (statement->executeUpdate() == 0) {
         throw std::runtime_error("problem not found");
     }

@@ -22,7 +22,7 @@ function setCreateEntryVisible(currentUser) {
     return;
   }
 
-  createLink.classList.toggle('hidden', !currentUser?.is_admin);
+  createLink.classList.remove('hidden');
 }
 
 // 根据当前登录用户是否为管理员，动态决定首页导航里是否展示出题入口。

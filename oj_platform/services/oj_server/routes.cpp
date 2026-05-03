@@ -471,6 +471,77 @@ void register_routes(crow::Crow<>& app) {
             return json_error(400, ex.what());
         }
     });
+    CROW_ROUTE(app, "/api/admin/problems").methods(crow::HTTPMethod::POST)([](const crow::request& req) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        const auto json = crow::json::load(req.body);
+        if (!json || !json.has("problem_id") || !json.has("title") ||
+            !json.has("time_limit_ms") || !json.has("memory_limit_mb") ||
+            !json.has("statement_markdown")) {
+            return json_error(400, "problem_id, title, time_limit_ms, memory_limit_mb and statement_markdown are required");
+        }
+
+        try {
+            const auto problem_id = json["problem_id"].i();
+            const auto time_limit_ms = json["time_limit_ms"].i();
+            const auto memory_limit_mb = json["memory_limit_mb"].i();
+            const std::string title = json["title"].s();
+            const std::string statement_markdown = json["statement_markdown"].s();
+
+            if (problem_id <= 0) {
+                return json_error(400, "problem_id must be positive");
+            }
+            if (title.empty()) {
+                return json_error(400, "title cannot be empty");
+            }
+            if (title.size() > 128) {
+                return json_error(400, "title is too long");
+            }
+            if (time_limit_ms <= 0) {
+                return json_error(400, "time_limit_ms must be positive");
+            }
+            if (memory_limit_mb <= 0) {
+                return json_error(400, "memory_limit_mb must be positive");
+            }
+            if (time_limit_ms > 60 * 1000) {
+                return json_error(400, "time_limit_ms is too large");
+            }
+            if (memory_limit_mb > 4096) {
+                return json_error(400, "memory_limit_mb is too large");
+            }
+            if (statement_markdown.empty()) {
+                return json_error(400, "statement_markdown cannot be empty");
+            }
+            if (statement_markdown.size() > 1024 * 1024) {
+                return json_error(400, "statement_markdown is too large");
+            }
+
+            ProblemRepository repository;
+            repository.create_problem(
+                problem_id,
+                title,
+                time_limit_ms,
+                memory_limit_mb,
+                statement_markdown);
+
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            redis_client.del(kProblemListCacheKey);
+
+            crow::json::wvalue body;
+            body["ok"] = true;
+            body["problem_id"] = problem_id;
+            body["title"] = title;
+            body["time_limit_ms"] = time_limit_ms;
+            body["memory_limit_mb"] = memory_limit_mb;
+            return crow::response{200, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
     CROW_ROUTE(app, "/api/admin/problems/<int>/id").methods(crow::HTTPMethod::PUT)([](const crow::request& req, std::int64_t old_problem_id) {
         const auto admin = require_admin(req);
         if (!admin) {
@@ -557,6 +628,54 @@ void register_routes(crow::Crow<>& app) {
             body["ok"] = true;
             body["problem_id"] = problem_id;
             body["title"] = title;
+            return crow::response{200, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+    CROW_ROUTE(app, "/api/admin/problems/<int>/limits").methods(crow::HTTPMethod::PUT)([](const crow::request& req, std::int64_t problem_id) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        const auto json = crow::json::load(req.body);
+        if (!json || !json.has("time_limit_ms") || !json.has("memory_limit_mb")) {
+            return json_error(400, "time_limit_ms and memory_limit_mb are required");
+        }
+
+        try {
+            const auto time_limit_ms = json["time_limit_ms"].i();
+            const auto memory_limit_mb = json["memory_limit_mb"].i();
+
+            if (time_limit_ms <= 0) {
+                return json_error(400, "time_limit_ms must be positive");
+            }
+
+            if (memory_limit_mb <= 0) {
+                return json_error(400, "memory_limit_mb must be positive");
+            }
+
+            if (time_limit_ms > 60 * 1000) {
+                return json_error(400, "time_limit_ms is too large");
+            }
+
+            if (memory_limit_mb > 4096) {
+                return json_error(400, "memory_limit_mb is too large");
+            }
+
+            ProblemRepository repository;
+            repository.update_problem_limits(problem_id, time_limit_ms, memory_limit_mb);
+
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            redis_client.del(kProblemListCacheKey);
+
+            crow::json::wvalue body;
+            body["ok"] = true;
+            body["problem_id"] = problem_id;
+            body["time_limit_ms"] = time_limit_ms;
+            body["memory_limit_mb"] = memory_limit_mb;
             return crow::response{200, body};
         } catch (const std::exception& ex) {
             return json_error(400, ex.what());

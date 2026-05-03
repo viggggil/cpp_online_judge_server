@@ -37,6 +37,17 @@
         </section>
 
         <section class="list-item admin-tool-card">
+          <h2>修改时空限制</h2>
+          <label class="label" for="problem-time-limit-input">时间限制（毫秒）</label>
+          <input id="problem-time-limit-input" class="input" type="number" min="1" max="60000" placeholder="请输入时间限制，例如 1000" />
+          <label class="label" for="problem-memory-limit-input">空间限制（MB）</label>
+          <input id="problem-memory-limit-input" class="input" type="number" min="1" max="4096" placeholder="请输入空间限制，例如 256" />
+          <div class="actions compact-actions">
+            <button id="update-limits-btn" class="button" type="button">保存限制</button>
+          </div>
+        </section>
+
+        <section class="list-item admin-tool-card">
           <h2>追加测试数据</h2>
           <div class="admin-create-note">上传单个测试数据文件，文件名需为 `数字.in` 或 `数字.out`。先上传任意一侧，另一侧补齐后会自动组成完整测试点。</div>
           <label class="label" for="testcase-file-input">测试数据文件</label>

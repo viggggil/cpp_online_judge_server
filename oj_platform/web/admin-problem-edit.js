@@ -68,6 +68,8 @@ async function loadProblemMeta(problemId) {
 
   document.getElementById('problem-id-input').value = data.id || problemId;
   document.getElementById('problem-title-input').value = data.title || '';
+  document.getElementById('problem-time-limit-input').value = data.time_limit_ms || '';
+  document.getElementById('problem-memory-limit-input').value = data.memory_limit_mb || '';
   document.getElementById('page-title').textContent = `编辑题面 - ${data.id}`;
 }
 
@@ -127,6 +129,49 @@ async function updateProblemTitle(problemId) {
     setStatus(error.message || '修改题目名称失败', true);
   } finally {
     setButtonsDisabled(['update-title-btn'], false);
+  }
+}
+
+// 更新题目的时间限制和空间限制，并在成功后同步表单中的当前值。
+async function updateProblemLimits(problemId) {
+  const rawTimeLimit = document.getElementById('problem-time-limit-input').value.trim();
+  const rawMemoryLimit = document.getElementById('problem-memory-limit-input').value.trim();
+  const timeLimitMs = Number(rawTimeLimit);
+  const memoryLimitMb = Number(rawMemoryLimit);
+
+  if (!rawTimeLimit || !Number.isInteger(timeLimitMs) || timeLimitMs <= 0) {
+    setStatus('请输入合法的时间限制（正整数毫秒）', true);
+    return;
+  }
+
+  if (!rawMemoryLimit || !Number.isInteger(memoryLimitMb) || memoryLimitMb <= 0) {
+    setStatus('请输入合法的空间限制（正整数 MB）', true);
+    return;
+  }
+
+  setButtonsDisabled(['update-limits-btn'], true);
+  setStatus('正在保存时空限制...');
+  try {
+    const response = await window.ojAuth.authFetch(`/api/admin/problems/${problemId}/limits`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        time_limit_ms: timeLimitMs,
+        memory_limit_mb: memoryLimitMb,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || '修改时空限制失败');
+    }
+
+    document.getElementById('problem-time-limit-input').value = data.time_limit_ms;
+    document.getElementById('problem-memory-limit-input').value = data.memory_limit_mb;
+    setStatus('时空限制已更新');
+  } catch (error) {
+    setStatus(error.message || '修改时空限制失败', true);
+  } finally {
+    setButtonsDisabled(['update-limits-btn'], false);
   }
 }
 
@@ -263,6 +308,7 @@ async function initPage() {
   document.getElementById('save-btn').addEventListener('click', () => saveStatement(problemId));
   document.getElementById('update-title-btn').addEventListener('click', () => updateProblemTitle(problemId));
   document.getElementById('update-id-btn').addEventListener('click', () => updateProblemId(problemId));
+  document.getElementById('update-limits-btn').addEventListener('click', () => updateProblemLimits(problemId));
   document.getElementById('append-testcase-btn').addEventListener('click', () => appendTestcaseFile(problemId));
   document.getElementById('delete-problem-btn').addEventListener('click', () => deleteProblem(problemId));
   document.getElementById('statement-editor').addEventListener('input', updatePreview);

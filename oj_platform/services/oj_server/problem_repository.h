@@ -56,9 +56,17 @@ public:
     ProblemRepository();
     explicit ProblemRepository(MySqlClient mysql_client);
 
+    void create_problem(
+        std::int64_t problem_id,
+        const std::string& title,
+        int time_limit_ms,
+        int memory_limit_mb,
+        const std::string& statement_markdown) const;
+
     void update_problem_id(std::int64_t old_problem_id, std::int64_t new_problem_id) const;
     void delete_problem(std::int64_t problem_id) const;
     void update_problem_title(std::int64_t problem_id, const std::string& title) const;
+    void update_problem_limits(std::int64_t problem_id, int time_limit_ms, int memory_limit_mb) const;
 
     std::optional<std::string> find_statement_markdown(
         std::int64_t problem_id,
