@@ -8,15 +8,22 @@
 </head>
 <body>
   <div class="container">
-    <a id="back-to-problem" class="back-link" href="/">← 返回题目详情</a>
-    <div class="card">
+    <header class="site-header">
       <div class="page-header-row">
         <div>
           <h1 id="page-title">编辑题面</h1>
           <div id="page-subtitle" class="meta">加载中...</div>
         </div>
+        <nav class="top-nav top-nav-primary">
+          <a class="button nav-button nav-button-inactive" href="/">首页</a>
+          <a class="button nav-button nav-button-inactive" href="/problems">题库</a>
+          <a class="button nav-button nav-button-inactive nav-submissions" href="/submissions">提交</a>
+          <a class="button nav-button nav-button-active nav-create" href="/web/admin-problem-create.html">创建</a>
+        </nav>
       </div>
-
+    </header>
+    <a id="back-to-problem" class="back-link" href="/problems">← 返回题目详情</a>
+    <div class="card">
       <div class="admin-tools-grid">
         <section class="list-item admin-tool-card">
           <h2>修改题号</h2>

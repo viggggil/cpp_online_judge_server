@@ -8,9 +8,22 @@
 </head>
 <body>
   <div class="container">
-    <a class="back-link" href="/">← 返回题目列表</a>
+    <header class="site-header">
+      <div class="page-header-row">
+        <div>
+          <h1>我的提交</h1>
+          <p>查看提交记录与判题状态</p>
+        </div>
+        <nav class="top-nav top-nav-primary">
+          <a class="button nav-button nav-button-inactive" href="/">首页</a>
+          <a class="button nav-button nav-button-inactive" href="/problems">题库</a>
+          <a class="button nav-button nav-button-active nav-submissions" href="/submissions">提交</a>
+          <a class="button nav-button nav-button-inactive nav-create" href="/web/admin-problem-create.html">创建</a>
+        </nav>
+      </div>
+    </header>
+    <a class="back-link" href="/problems">← 返回题库</a>
     <div class="card">
-      <h1>我的提交</h1>
       <div id="submission-list" class="list"></div>
     </div>
   </div>

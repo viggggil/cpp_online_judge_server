@@ -72,14 +72,24 @@ async function loadProblems() {
 
     container.appendChild(item);
   }
+}
 
-  document.getElementById('nav-submissions')?.addEventListener('click', (event) => {
+window.addEventListener('oj-auth-changed', () => {
+  refreshAdminNavigation().catch(() => {
+    setCreateEntryVisible(null);
+  });
+});
+
+document.querySelectorAll('.nav-submissions').forEach((element) => {
+  element.addEventListener('click', (event) => {
     if (!window.ojAuth.requireLogin('查看提交记录前请先登录')) {
       event.preventDefault();
     }
   });
+});
 
-  document.getElementById('nav-problem-create')?.addEventListener('click', async (event) => {
+document.querySelectorAll('.nav-create').forEach((element) => {
+  element.addEventListener('click', async (event) => {
     if (!window.ojAuth.requireLogin('进入创建页前请先登录')) {
       event.preventDefault();
       return;
@@ -90,12 +100,6 @@ async function loadProblems() {
       event.preventDefault();
       alert('权限不足，仅管理员可以进入题目创建页面');
     }
-  });
-}
-
-window.addEventListener('oj-auth-changed', () => {
-  refreshAdminNavigation().catch(() => {
-    setCreateEntryVisible(null);
   });
 });
 

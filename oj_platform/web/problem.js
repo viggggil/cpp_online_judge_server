@@ -30,6 +30,45 @@ function bindEditButton(problemId, currentUser) {
   });
 }
 
+async function fetchCurrentUserOptional() {
+  if (!window.ojAuth.isLoggedIn()) {
+    return null;
+  }
+
+  const response = await fetch('/api/auth/me', {
+    headers: {
+      Authorization: `Bearer ${window.ojAuth.getToken()}`,
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return response.json();
+}
+
+function bindTopNavigation() {
+  document.querySelector('.nav-submissions')?.addEventListener('click', (event) => {
+    if (!window.ojAuth.requireLogin('查看提交记录前请先登录')) {
+      event.preventDefault();
+    }
+  });
+
+  document.querySelector('.nav-create')?.addEventListener('click', async (event) => {
+    if (!window.ojAuth.requireLogin('进入创建页前请先登录')) {
+      event.preventDefault();
+      return;
+    }
+
+    const currentUser = await fetchCurrentUserOptional();
+    if (!currentUser?.is_admin) {
+      event.preventDefault();
+      alert('权限不足，仅管理员可以进入题目创建页面');
+    }
+  });
+}
+
 // 加载题面页数据，并在管理员访问时额外开放后台编辑入口。
 async function loadProblem() {
   await window.ojAuth.initAuth();
@@ -50,6 +89,7 @@ async function loadProblem() {
   document.getElementById('statement').innerHTML = window.ojMarkdown.markdownToHtml(problem.statement_markdown || '');
   document.getElementById('submit-link').href = `/submit/${problem.id}`;
   bindEditButton(problem.id, currentUser);
+  bindTopNavigation();
 }
 
 loadProblem().catch(err => {

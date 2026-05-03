@@ -5,6 +5,45 @@ function formatTimestamp(timestamp) {
   return new Date(timestamp * 1000).toLocaleString('zh-CN');
 }
 
+async function fetchCurrentUserOptional() {
+  if (!window.ojAuth.isLoggedIn()) {
+    return null;
+  }
+
+  const response = await fetch('/api/auth/me', {
+    headers: {
+      Authorization: `Bearer ${window.ojAuth.getToken()}`,
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return response.json();
+}
+
+function bindTopNavigation() {
+  document.querySelector('.nav-submissions')?.addEventListener('click', (event) => {
+    if (!window.ojAuth.requireLogin('查看提交记录前请先登录')) {
+      event.preventDefault();
+    }
+  });
+
+  document.querySelector('.nav-create')?.addEventListener('click', async (event) => {
+    if (!window.ojAuth.requireLogin('进入创建页前请先登录')) {
+      event.preventDefault();
+      return;
+    }
+
+    const currentUser = await fetchCurrentUserOptional();
+    if (!currentUser?.is_admin) {
+      event.preventDefault();
+      alert('权限不足，仅管理员可以进入题目创建页面');
+    }
+  });
+}
+
 function renderStatus(status) {
   return ['OK', 'QUEUED', 'RUNNING'].includes(status)
     ? `<span class="status-ok">${status}</span>`
@@ -17,6 +56,8 @@ async function loadSubmissions() {
   if (!window.ojAuth.protectPage()) {
     return;
   }
+
+  bindTopNavigation();
 
   const container = document.getElementById('submission-list');
   container.textContent = '加载中...';

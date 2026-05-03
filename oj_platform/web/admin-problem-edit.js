@@ -213,7 +213,7 @@ async function updateProblemId(problemId) {
   }
 }
 
-// 删除题目并在操作完成后把管理员带回首页，避免停留在失效页面上。
+// 删除题目并在操作完成后把管理员带回题库页，避免停留在失效页面上。
 async function deleteProblem(problemId) {
   const confirmed = window.confirm(`确定要删除题目 ${problemId} 吗？此操作不可恢复。`);
   if (!confirmed) {
@@ -231,9 +231,9 @@ async function deleteProblem(problemId) {
       throw new Error(data.error || '删除题目失败');
     }
 
-    setStatus('题目已删除，即将返回题目列表');
+    setStatus('题目已删除，即将返回题库页');
     setTimeout(() => {
-      window.location.href = '/';
+      window.location.href = '/problems';
     }, 800);
   } catch (error) {
     setStatus(error.message || '删除题目失败', true);

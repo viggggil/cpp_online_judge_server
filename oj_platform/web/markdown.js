@@ -24,6 +24,7 @@
     let inList = false;
     let inCodeBlock = false;
     let codeBuffer = [];
+    let paragraphBuffer = [];
 
     const closeList = () => {
       if (inList) {
@@ -32,8 +33,16 @@
       }
     };
 
+    const closeParagraph = () => {
+      if (paragraphBuffer.length > 0) {
+        html.push(`<p>${renderInlineMarkdown(paragraphBuffer.join('<br>'))}</p>`);
+        paragraphBuffer = [];
+      }
+    };
+
     const closeCodeBlock = () => {
       if (inCodeBlock) {
+        closeParagraph();
         html.push(`<pre><code>${codeBuffer.join('\n')}</code></pre>`);
         codeBuffer = [];
         inCodeBlock = false;
@@ -42,6 +51,7 @@
 
     for (const line of lines) {
       if (line.startsWith('```')) {
+        closeParagraph();
         closeList();
         if (inCodeBlock) {
           closeCodeBlock();
@@ -57,6 +67,7 @@
       }
 
       if (!line.trim()) {
+        closeParagraph();
         closeList();
         html.push('');
         continue;
@@ -64,6 +75,7 @@
 
       const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
       if (headingMatch) {
+        closeParagraph();
         closeList();
         const level = headingMatch[1].length;
         html.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
@@ -72,6 +84,7 @@
 
       const listMatch = line.match(/^[-*]\s+(.*)$/);
       if (listMatch) {
+        closeParagraph();
         if (!inList) {
           html.push('<ul>');
           inList = true;
@@ -81,9 +94,10 @@
       }
 
       closeList();
-      html.push(`<p>${renderInlineMarkdown(line)}</p>`);
+      paragraphBuffer.push(line);
     }
 
+    closeParagraph();
     closeList();
     closeCodeBlock();
     return html.join('\n') || '<p>暂无内容</p>';

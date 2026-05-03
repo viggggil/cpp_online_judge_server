@@ -8,9 +8,21 @@
 </head>
 <body>
   <div class="container">
-    <a class="back-link" id="problem-link" href="#">← 返回题目</a>
+    <header class="site-header">
+      <div class="page-header-row">
+        <div>
+          <h1>提交代码</h1>
+          <p>选择题目并提交源码</p>
+        </div>
+        <nav class="top-nav top-nav-primary">
+          <a class="button nav-button nav-button-inactive" href="/">首页</a>
+          <a class="button nav-button nav-button-inactive" href="/problems">题库</a>
+          <a class="button nav-button nav-button-active nav-submissions" href="/submissions">提交</a>
+          <a class="button nav-button nav-button-inactive nav-create" href="/web/admin-problem-create.html">创建</a>
+        </nav>
+      </div>
+    </header>
     <div class="card">
-      <h1>提交代码</h1>
       <div id="problem-info" class="meta"></div>
       <label class="label" for="language">语言</label>
       <select id="language" class="input">

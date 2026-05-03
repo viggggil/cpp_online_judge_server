@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>题目详情</title>
+  <title>OJ 题库</title>
   <link rel="stylesheet" href="/web/styles.css" />
 </head>
 <body>
@@ -11,8 +11,8 @@
     <header class="site-header">
       <div class="page-header-row">
         <div>
-          <h1>题目详情</h1>
-          <p>查看题面与限制信息</p>
+          <h1>OJ Platform</h1>
+          <p>题库</p>
         </div>
         <nav class="top-nav top-nav-primary">
           <a class="button nav-button nav-button-inactive" href="/">首页</a>
@@ -22,21 +22,13 @@
         </nav>
       </div>
     </header>
-    <a class="back-link" href="/problems">← 返回题库</a>
-    <div class="card">
-      <div class="page-header-row">
-        <h1 id="title">加载中...</h1>
-        <button id="edit-problem-btn" class="button auth-btn-secondary hidden" type="button">编辑题面</button>
+    <main>
+      <div class="card">
+        <div id="problem-list" class="list"></div>
       </div>
-      <div id="meta" class="meta"></div>
-      <div id="statement" class="statement-rendered"></div>
-      <div class="actions">
-        <a id="submit-link" class="button" href="#">去提交</a>
-      </div>
-    </div>
+    </main>
   </div>
   <script src="/web/auth.js"></script>
-  <script src="/web/markdown.js"></script>
-  <script src="/web/problem.js"></script>
+  <script src="/web/index.js"></script>
 </body>
 </html>

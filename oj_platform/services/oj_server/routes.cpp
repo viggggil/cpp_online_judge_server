@@ -222,7 +222,11 @@ crow::json::wvalue make_problem_list_json(const std::vector<oj::common::ProblemS
 // 统一注册静态页面、鉴权接口、题目接口、提交接口和管理员后台接口。
 void register_routes(crow::Crow<>& app) {
     CROW_ROUTE(app, "/")([] {
-        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "index.html"));
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "home.html"));
+    });
+
+    CROW_ROUTE(app, "/problems")([] {
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "problems.html"));
     });
 
     CROW_ROUTE(app, "/problems/<int>")([](std::int64_t) {

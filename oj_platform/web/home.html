@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>提交结果</title>
+  <title>OJ Platform 首页</title>
   <link rel="stylesheet" href="/web/styles.css" />
 </head>
 <body>
@@ -11,28 +11,27 @@
     <header class="site-header">
       <div class="page-header-row">
         <div>
-          <h1>提交结果</h1>
-          <p>查看本次评测的完整结果</p>
+          <h1>OJ Platform</h1>
+          <p>在线判题平台首页</p>
         </div>
         <nav class="top-nav top-nav-primary">
-          <a class="button nav-button nav-button-inactive" href="/">首页</a>
+          <a class="button nav-button nav-button-active" href="/">首页</a>
           <a class="button nav-button nav-button-inactive" href="/problems">题库</a>
-          <a class="button nav-button nav-button-active nav-submissions" href="/submissions">提交</a>
+          <a class="button nav-button nav-button-inactive nav-submissions" href="/submissions">提交</a>
           <a class="button nav-button nav-button-inactive nav-create" href="/web/admin-problem-create.html">创建</a>
         </nav>
       </div>
     </header>
-    <a class="back-link" href="/submissions">← 返回提交列表</a>
-    <div class="card">
-      <div id="summary" class="meta"></div>
-      <div id="polling-hint" class="notice"></div>
-      <h2>编译信息</h2>
-      <pre id="compile-info" class="notice"></pre>
-      <h2>测试点结果</h2>
-      <div id="case-results"></div>
-    </div>
+
+    <main class="page-stack">
+      <section class="card hero-card">
+        <h2>项目介绍</h2>
+        <div id="home-intro" class="statement-rendered">加载中...</div>
+      </section>
+    </main>
   </div>
   <script src="/web/auth.js"></script>
-  <script src="/web/submission.js"></script>
+  <script src="/web/markdown.js"></script>
+  <script src="/web/home.js"></script>
 </body>
 </html>
