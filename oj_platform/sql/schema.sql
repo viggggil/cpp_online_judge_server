@@ -106,3 +106,39 @@ CREATE TABLE IF NOT EXISTS submission_testcases (
     UNIQUE KEY uk_submission_case_no (submission_db_id, case_no),
     CONSTRAINT fk_submission_testcases_submission FOREIGN KEY (submission_db_id) REFERENCES submissions(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS assignments (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description_markdown MEDIUMTEXT NOT NULL,
+    start_at BIGINT NOT NULL,
+    end_at BIGINT NOT NULL,
+    created_by BIGINT NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    KEY idx_assignments_start_at (start_at DESC),
+    KEY idx_assignments_created_by (created_by),
+    CONSTRAINT fk_assignments_created_by
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS assignment_problems (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    assignment_id BIGINT NOT NULL,
+    problem_id BIGINT NOT NULL,
+    display_order INT NOT NULL,
+    alias VARCHAR(32) NOT NULL,
+    UNIQUE KEY uk_assignment_problem (assignment_id, problem_id),
+    UNIQUE KEY uk_assignment_alias (assignment_id, alias),
+    UNIQUE KEY uk_assignment_display_order (assignment_id, display_order),
+    CONSTRAINT fk_assignment_problems_assignment
+        FOREIGN KEY (assignment_id) REFERENCES assignments(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_assignment_problems_problem
+        FOREIGN KEY (problem_id) REFERENCES problems(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

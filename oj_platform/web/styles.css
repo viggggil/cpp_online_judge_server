@@ -33,6 +33,12 @@ body {
   cursor: pointer;
 }
 .button:hover { background: #1d4ed8; }
+.button:disabled,
+.button-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .input, .code {
   width: 100%;
   border: 1px solid #d1d5db;
@@ -376,6 +382,50 @@ body {
   margin-top: 0;
 }
 
+.assignment-section + .assignment-section {
+  margin-top: 20px;
+}
+
+.assignment-problem-picker {
+  margin-top: 20px;
+}
+
+.assignment-problem-picker h2 {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
+.assignment-problem-item {
+  margin-bottom: 10px;
+}
+
+.assignment-problem-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.assignment-problem-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.assignment-problem-alias-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4b5563;
+  white-space: nowrap;
+}
+
+.assignment-problem-alias {
+  width: 88px;
+}
+
 .danger-button {
   background: #dc2626;
 }
@@ -391,5 +441,18 @@ body {
 
   .editor-layout {
     grid-template-columns: 1fr;
+  }
+
+  .assignment-problem-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .assignment-problem-alias-group {
+    width: 100%;
+  }
+
+  .assignment-problem-alias {
+    width: 100%;
   }
 }

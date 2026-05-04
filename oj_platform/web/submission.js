@@ -3,45 +3,6 @@ function submissionIdFromPath() {
   return parts[1];
 }
 
-async function fetchCurrentUserOptional() {
-  if (!window.ojAuth.isLoggedIn()) {
-    return null;
-  }
-
-  const response = await fetch('/api/auth/me', {
-    headers: {
-      Authorization: `Bearer ${window.ojAuth.getToken()}`,
-    },
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  return response.json();
-}
-
-function bindTopNavigation() {
-  document.querySelector('.nav-submissions')?.addEventListener('click', (event) => {
-    if (!window.ojAuth.requireLogin('查看提交记录前请先登录')) {
-      event.preventDefault();
-    }
-  });
-
-  document.querySelector('.nav-create')?.addEventListener('click', async (event) => {
-    if (!window.ojAuth.requireLogin('进入创建页前请先登录')) {
-      event.preventDefault();
-      return;
-    }
-
-    const currentUser = await fetchCurrentUserOptional();
-    if (!currentUser?.is_admin) {
-      event.preventDefault();
-      alert('权限不足，仅管理员可以进入题目创建页面');
-    }
-  });
-}
-
 function renderStatus(status) {
   return ['OK'].includes(status)
     ? `<span class="status-ok">${status}</span>`
@@ -163,7 +124,7 @@ function renderSubmission(data) {
 // 在提交未结束前持续轮询状态，让详情页自动刷新到最终判题结果。
 async function loadSubmission() {
   await window.ojAuth.initAuth();
-  bindTopNavigation();
+  window.ojNav.bindProtectedNavigation();
   const hint = document.getElementById('polling-hint');
   while (true) {
     const data = await fetchSubmission();

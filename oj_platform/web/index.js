@@ -1,21 +1,3 @@
-async function fetchCurrentUserOptional() {
-  if (!window.ojAuth.isLoggedIn()) {
-    return null;
-  }
-
-  const response = await fetch('/api/auth/me', {
-    headers: {
-      Authorization: `Bearer ${window.ojAuth.getToken()}`,
-    },
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  return response.json();
-}
-
 function setCreateEntryVisible(currentUser) {
   const createLink = document.getElementById('nav-problem-create');
   if (!createLink) {
@@ -28,7 +10,7 @@ function setCreateEntryVisible(currentUser) {
 // 根据当前登录用户是否为管理员，动态决定首页导航里是否展示出题入口。
 async function refreshAdminNavigation() {
   try {
-    const currentUser = await fetchCurrentUserOptional();
+    const currentUser = await window.ojNav.fetchCurrentUserOptional();
     setCreateEntryVisible(currentUser);
   } catch (_) {
     setCreateEntryVisible(null);
@@ -80,28 +62,7 @@ window.addEventListener('oj-auth-changed', () => {
   });
 });
 
-document.querySelectorAll('.nav-submissions').forEach((element) => {
-  element.addEventListener('click', (event) => {
-    if (!window.ojAuth.requireLogin('查看提交记录前请先登录')) {
-      event.preventDefault();
-    }
-  });
-});
-
-document.querySelectorAll('.nav-create').forEach((element) => {
-  element.addEventListener('click', async (event) => {
-    if (!window.ojAuth.requireLogin('进入创建页前请先登录')) {
-      event.preventDefault();
-      return;
-    }
-
-    const currentUser = await fetchCurrentUserOptional();
-    if (!currentUser?.is_admin) {
-      event.preventDefault();
-      alert('权限不足，仅管理员可以进入题目创建页面');
-    }
-  });
-});
+window.ojNav.bindProtectedNavigation();
 
 loadProblems().catch(err => {
   document.getElementById('problem-list').textContent = `加载失败: ${err.message}`;

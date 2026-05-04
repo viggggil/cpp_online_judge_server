@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>提交结果</title>
+  <title>作业列表</title>
   <link rel="stylesheet" href="/web/styles.css" />
 </head>
 <body>
@@ -11,30 +11,29 @@
     <header class="site-header">
       <div class="page-header-row">
         <div>
-          <h1>提交结果</h1>
-          <p>查看本次评测的完整结果</p>
+          <h1>作业</h1>
+          <p>查看课程作业、起止时间与题目数量</p>
         </div>
         <nav class="top-nav top-nav-primary">
           <a class="button nav-button nav-button-inactive" href="/">首页</a>
           <a class="button nav-button nav-button-inactive" href="/problems">题库</a>
-          <a class="button nav-button nav-button-inactive" href="/assignments">作业</a>
-          <a class="button nav-button nav-button-active nav-submissions" href="/submissions">提交</a>
+          <a class="button nav-button nav-button-active" href="/assignments">作业</a>
+          <a class="button nav-button nav-button-inactive nav-submissions" href="/submissions">提交</a>
           <a class="button nav-button nav-button-inactive nav-create" href="/web/admin-problem-create.html">创建</a>
         </nav>
       </div>
     </header>
-    <a class="back-link" href="/submissions">← 返回提交列表</a>
-    <div class="card">
-      <div id="summary" class="meta"></div>
-      <div id="polling-hint" class="notice"></div>
-      <h2>编译信息</h2>
-      <pre id="compile-info" class="notice"></pre>
-      <h2>测试点结果</h2>
-      <div id="case-results"></div>
-    </div>
+    <main>
+      <div class="card">
+        <div id="assignment-toolbar" class="actions compact-actions">
+          <a id="create-assignment-link" class="button auth-btn-secondary hidden" href="/web/admin-assignment-create.html">创建作业</a>
+        </div>
+        <div id="assignment-list" class="list"></div>
+      </div>
+    </main>
   </div>
   <script src="/web/auth.js"></script>
   <script src="/web/nav.js"></script>
-  <script src="/web/submission.js"></script>
+  <script src="/web/assignments.js"></script>
 </body>
 </html>

@@ -3,43 +3,23 @@ function problemIdFromPath() {
   return parts[1];
 }
 
-async function fetchCurrentUserOptional() {
-  if (!window.ojAuth.isLoggedIn()) {
-    return null;
-  }
-
-  const response = await fetch('/api/auth/me', {
-    headers: {
-      Authorization: `Bearer ${window.ojAuth.getToken()}`,
-    },
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  return response.json();
+function assignmentIdFromQuery() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('assignment_id') || '';
 }
 
-function bindTopNavigation() {
-  document.querySelector('.nav-submissions')?.addEventListener('click', (event) => {
-    if (!window.ojAuth.requireLogin('查看提交记录前请先登录')) {
-      event.preventDefault();
-    }
-  });
+function formatTimestamp(timestamp) {
+  if (!timestamp) {
+    return '-';
+  }
+  return new Date(timestamp * 1000).toLocaleString('zh-CN');
+}
 
-  document.querySelector('.nav-create')?.addEventListener('click', async (event) => {
-    if (!window.ojAuth.requireLogin('进入创建页前请先登录')) {
-      event.preventDefault();
-      return;
-    }
-
-    const currentUser = await fetchCurrentUserOptional();
-    if (!currentUser?.is_admin) {
-      event.preventDefault();
-      alert('权限不足，仅管理员可以进入题目创建页面');
-    }
-  });
+function setSubmitDisabled(disabled) {
+  const button = document.getElementById('submit-btn');
+  if (button) {
+    button.disabled = disabled;
+  }
 }
 
 // 加载提交页顶部的题目信息，帮助用户在提交前确认当前题号与限制。
@@ -52,8 +32,37 @@ async function loadProblemInfo() {
   const response = await window.ojAuth.authFetch(`/api/problems/${id}`);
   if (!response.ok) throw new Error('题目不存在');
   const problem = await response.json();
-  document.getElementById('problem-info').textContent = `${problem.id} - ${problem.title}\n时间限制: ${problem.time_limit_ms} ms | 内存限制: ${problem.memory_limit_mb} MB`;
-  bindTopNavigation();
+  let message = `${problem.id} - ${problem.title}\n时间限制: ${problem.time_limit_ms} ms | 内存限制: ${problem.memory_limit_mb} MB`;
+
+  const assignmentId = assignmentIdFromQuery();
+  if (assignmentId) {
+    const assignmentResponse = await fetch(`/api/assignments/${encodeURIComponent(assignmentId)}`);
+    const assignment = await assignmentResponse.json();
+    if (!assignmentResponse.ok) {
+      throw new Error(assignment.error || '作业不存在');
+    }
+
+    if (!(assignment.problems || []).some((item) => String(item.problem_id) === String(id))) {
+      throw new Error('当前题目不属于该作业');
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const started = now >= assignment.start_at;
+    message += `\n所属作业：${assignment.title}`;
+    message += `\n作业开始时间：${formatTimestamp(assignment.start_at)} | 结束时间：${formatTimestamp(assignment.end_at)}`;
+
+    if (!started) {
+      message += '\n作业尚未开始，当前不能提交。';
+      setSubmitDisabled(true);
+    } else {
+      setSubmitDisabled(false);
+    }
+  } else {
+    setSubmitDisabled(false);
+  }
+
+  document.getElementById('problem-info').textContent = message;
+  window.ojNav.bindProtectedNavigation();
 }
 
 // 收集用户填写的代码和语言，并调用提交接口后跳转到对应的评测详情页。
@@ -63,6 +72,7 @@ async function submitCode() {
     return;
   }
   const id = problemIdFromPath();
+  const assignmentId = assignmentIdFromQuery();
   const sourceCode = document.getElementById('source_code').value;
   const language = document.getElementById('language').value;
   const message = document.getElementById('submit-message');
@@ -73,6 +83,7 @@ async function submitCode() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       problem_id: id,
+      assignment_id: assignmentId || undefined,
       language,
       source_code: sourceCode
     })

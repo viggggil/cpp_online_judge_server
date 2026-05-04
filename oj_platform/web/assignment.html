@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>题目详情</title>
+  <title>作业详情</title>
   <link rel="stylesheet" href="/web/styles.css" />
 </head>
 <body>
@@ -11,34 +11,34 @@
     <header class="site-header">
       <div class="page-header-row">
         <div>
-          <h1>题目详情</h1>
-          <p>查看题面与限制信息</p>
+          <h1 id="assignment-title">作业详情</h1>
+          <p>查看作业简介、起止时间和题目列表</p>
         </div>
         <nav class="top-nav top-nav-primary">
           <a class="button nav-button nav-button-inactive" href="/">首页</a>
-          <a class="button nav-button nav-button-active" href="/problems">题库</a>
-          <a class="button nav-button nav-button-inactive" href="/assignments">作业</a>
+          <a class="button nav-button nav-button-inactive" href="/problems">题库</a>
+          <a class="button nav-button nav-button-active" href="/assignments">作业</a>
           <a class="button nav-button nav-button-inactive nav-submissions" href="/submissions">提交</a>
           <a class="button nav-button nav-button-inactive nav-create" href="/web/admin-problem-create.html">创建</a>
         </nav>
       </div>
     </header>
-    <a class="back-link" href="/problems">← 返回题库</a>
+    <a class="back-link" href="/assignments">← 返回作业列表</a>
     <div class="card">
-      <div class="page-header-row">
-        <h1 id="title">加载中...</h1>
-        <button id="edit-problem-btn" class="button auth-btn-secondary hidden" type="button">编辑题面</button>
-      </div>
-      <div id="meta" class="meta"></div>
-      <div id="statement" class="statement-rendered"></div>
-      <div class="actions">
-        <a id="submit-link" class="button" href="#">去提交</a>
-      </div>
+      <div id="assignment-meta" class="meta">加载中...</div>
+      <section class="assignment-section">
+        <h2>作业简介</h2>
+        <div id="assignment-description" class="statement-rendered"></div>
+      </section>
+      <section class="assignment-section">
+        <h2>题目列表</h2>
+        <div id="assignment-problems" class="list"></div>
+      </section>
     </div>
   </div>
   <script src="/web/auth.js"></script>
   <script src="/web/nav.js"></script>
   <script src="/web/markdown.js"></script>
-  <script src="/web/problem.js"></script>
+  <script src="/web/assignment.js"></script>
 </body>
 </html>

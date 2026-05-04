@@ -6,6 +6,7 @@ const HOME_INTRO_MARKDOWN = `
 ## 当前项目能力
 
 - 支持题目列表、题目详情、代码提交与提交结果查看
+- 支持作业列表、作业详情与管理员创建作业
 - 支持用户注册、登录、JWT 鉴权与前端登录态控制
 - 支持基于 MySQL 的题目、题面、标签与测试点读取
 - 支持 Redis 题目列表缓存与提交异步队列
@@ -23,8 +24,9 @@ Browser -> oj_server -> Redis queue -> judge_dispatcher -> judge_worker
 ## 使用方式
 
 - 在“题库”页浏览题目并进入题面
+- 在“作业”页查看课程作业与对应题目列表
 - 在“提交”页查看历史提交记录
-- 管理员可在“创建”页导入题目包，或手动创建一个暂不带测试数据的新题目
+- 管理员可在“创建”页导入题目包、手动创建题目，或创建作业
 - 新建空题目的测试数据可以后续在编辑页追加
 
 ## 项目定位
@@ -32,49 +34,10 @@ Browser -> oj_server -> Redis queue -> judge_dispatcher -> judge_worker
 当前版本已经不是单纯的目录骨架，而是一个可以运行和演示的最小 OJ 原型，适合继续扩展判题能力、管理后台和前端体验。
 `;
 
-async function fetchCurrentUserOptional() {
-  if (!window.ojAuth.isLoggedIn()) {
-    return null;
-  }
-
-  const response = await fetch('/api/auth/me', {
-    headers: {
-      Authorization: `Bearer ${window.ojAuth.getToken()}`,
-    },
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  return response.json();
-}
-
-function bindProtectedNavigation() {
-  document.querySelector('.nav-submissions')?.addEventListener('click', (event) => {
-    if (!window.ojAuth.requireLogin('查看提交记录前请先登录')) {
-      event.preventDefault();
-    }
-  });
-
-  document.querySelector('.nav-create')?.addEventListener('click', async (event) => {
-    if (!window.ojAuth.requireLogin('进入创建页前请先登录')) {
-      event.preventDefault();
-      return;
-    }
-
-    const currentUser = await fetchCurrentUserOptional();
-    if (!currentUser?.is_admin) {
-      event.preventDefault();
-      alert('权限不足，仅管理员可以进入题目创建页面');
-    }
-  });
-}
-
 async function initHomePage() {
   await window.ojAuth.initAuth();
   document.getElementById('home-intro').innerHTML = window.ojMarkdown.markdownToHtml(HOME_INTRO_MARKDOWN);
-  bindProtectedNavigation();
+  window.ojNav.bindProtectedNavigation();
 }
 
 initHomePage().catch((error) => {
