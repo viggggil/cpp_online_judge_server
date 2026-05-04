@@ -28,15 +28,17 @@ async function refreshAssignmentToolbar() {
   try {
     const currentUser = await window.ojNav.fetchCurrentUserOptional();
     setCreateAssignmentEntryVisible(currentUser);
+    return currentUser;
   } catch (_) {
     setCreateAssignmentEntryVisible(null);
+    return null;
   }
 }
 
 async function loadAssignments() {
   await window.ojAuth.initAuth();
   window.ojNav.bindProtectedNavigation();
-  await refreshAssignmentToolbar();
+  const currentUser = await refreshAssignmentToolbar();
 
   const container = document.getElementById('assignment-list');
   container.textContent = '加载中...';
@@ -65,6 +67,7 @@ async function loadAssignments() {
       <p>结束时间：${formatTimestamp(assignment.end_at)}</p>
       <div class="actions compact-actions">
         <a class="button" href="/assignments/${assignment.id}">查看作业</a>
+        ${currentUser?.is_admin ? `<a class="button auth-btn-secondary" href="/web/admin-assignment-edit.html?assignment_id=${assignment.id}">编辑作业</a>` : ''}
       </div>
     `;
     container.appendChild(item);

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>编辑作业</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="site-header">
+      <div class="page-header-row">
+        <div>
+          <h1 id="page-title">编辑作业</h1>
+          <div id="page-subtitle" class="meta">加载中...</div>
+        </div>
+        <nav class="top-nav top-nav-primary">
+          <a class="button nav-button nav-button-inactive" href="/">首页</a>
+          <a class="button nav-button nav-button-inactive" href="/problems">题库</a>
+          <a class="button nav-button nav-button-inactive" href="/assignments">作业</a>
+          <a class="button nav-button nav-button-inactive nav-submissions" href="/submissions">提交</a>
+          <a class="button nav-button nav-button-active nav-create" href="/web/admin-problem-create.html">创建</a>
+        </nav>
+      </div>
+    </header>
+    <a id="back-to-assignment" class="back-link" href="/assignments">← 返回作业详情</a>
+    <div class="card">
+      <div class="admin-tools-grid">
+        <section class="list-item admin-tool-card">
+          <h2>修改作业名称</h2>
+          <label class="label" for="assignment-title-input">作业名称</label>
+          <input id="assignment-title-input" class="input" type="text" maxlength="255" placeholder="请输入作业名称" />
+          <div class="actions compact-actions">
+            <button id="update-title-btn" class="button" type="button">保存名称</button>
+          </div>
+        </section>
+
+        <section class="list-item admin-tool-card">
+          <h2>修改起止时间</h2>
+          <label class="label" for="assignment-start-input">开始时间</label>
+          <input id="assignment-start-input" class="input" type="datetime-local" />
+          <label class="label" for="assignment-end-input">结束时间</label>
+          <input id="assignment-end-input" class="input" type="datetime-local" />
+          <div class="actions compact-actions">
+            <button id="update-schedule-btn" class="button" type="button">保存时间</button>
+          </div>
+          <div class="admin-create-note">开始时间只能在未开始前提前，结束时间只能向后延长。</div>
+        </section>
+
+        <section class="list-item admin-tool-card assignment-add-card">
+          <h2>追加题目</h2>
+          <label class="label" for="assignment-add-problems-select">选择题目</label>
+          <select id="assignment-add-problems-select" class="input" multiple size="8"></select>
+          <div class="admin-create-note">按住 Ctrl 或 Command 可多选。追加时会自动生成 display_order 和 alias。</div>
+          <div class="actions compact-actions">
+            <button id="reload-problems-btn" class="button auth-btn-secondary" type="button">刷新题库</button>
+            <button id="add-problems-btn" class="button" type="button">追加题目</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="editor-layout">
+        <section class="editor-panel">
+          <h2>作业简介 Markdown</h2>
+          <textarea id="assignment-description-editor" class="input code editor-textarea" placeholder="请输入作业简介 Markdown"></textarea>
+        </section>
+
+        <section class="editor-panel">
+          <h2>实时预览</h2>
+          <div id="assignment-description-preview" class="statement preview-panel"></div>
+        </section>
+      </div>
+
+      <div class="actions">
+        <button id="save-description-btn" class="button" type="button">保存简介</button>
+        <button id="cancel-btn" class="button auth-btn-secondary" type="button">取消</button>
+      </div>
+
+      <section class="assignment-section">
+        <h2>当前题目列表</h2>
+        <div id="assignment-problems" class="list"></div>
+      </section>
+
+      <pre id="status-message" class="notice status-message"></pre>
+    </div>
+  </div>
+  <script src="/web/auth.js"></script>
+  <script src="/web/nav.js"></script>
+  <script src="/web/markdown.js"></script>
+  <script src="/web/admin-assignment-edit.js"></script>
+</body>
+</html>

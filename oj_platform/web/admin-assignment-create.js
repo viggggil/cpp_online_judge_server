@@ -170,18 +170,12 @@ function validateForm() {
     throw new Error('结束时间必须晚于开始时间');
   }
 
-  const selectedProblems = [];
+  const selectedProblemIds = [];
   document.querySelectorAll('.assignment-problem-checkbox:checked').forEach((checkbox) => {
-    const problemId = Number(checkbox.dataset.problemId);
-    const aliasInput = document.querySelector(`.assignment-problem-alias[data-problem-id="${checkbox.dataset.problemId}"]`);
-    const alias = aliasInput ? aliasInput.value.trim() : '';
-    selectedProblems.push({
-      problem_id: problemId,
-      alias,
-    });
+    selectedProblemIds.push(Number(checkbox.dataset.problemId));
   });
 
-  if (!selectedProblems.length) {
+  if (!selectedProblemIds.length) {
     throw new Error('请至少选择一道题加入作业');
   }
 
@@ -190,7 +184,7 @@ function validateForm() {
     description_markdown: descriptionMarkdown,
     start_at: startAt,
     end_at: endAt,
-    problems: selectedProblems,
+    problem_ids: selectedProblemIds,
   };
 }
 

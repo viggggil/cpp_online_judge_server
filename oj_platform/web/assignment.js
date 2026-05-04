@@ -3,11 +3,32 @@ function assignmentIdFromPath() {
   return parts[1];
 }
 
+async function fetchCurrentUserOptional() {
+  return window.ojNav.fetchCurrentUserOptional();
+}
+
 function formatTimestamp(timestamp) {
   if (!timestamp) {
     return '-';
   }
   return new Date(timestamp * 1000).toLocaleString('zh-CN');
+}
+
+function bindEditButton(assignmentId, currentUser) {
+  const editButton = document.getElementById('edit-assignment-btn');
+  if (!editButton) {
+    return;
+  }
+
+  if (!currentUser?.is_admin) {
+    editButton.classList.add('hidden');
+    return;
+  }
+
+  editButton.classList.remove('hidden');
+  editButton.addEventListener('click', () => {
+    window.location.href = `/web/admin-assignment-edit.html?assignment_id=${encodeURIComponent(assignmentId)}`;
+  });
 }
 
 function isAssignmentStarted(startAt) {
@@ -63,7 +84,10 @@ async function loadAssignment() {
   window.ojNav.bindProtectedNavigation();
 
   const assignmentId = assignmentIdFromPath();
-  const response = await fetch(`/api/assignments/${assignmentId}`);
+  const [response, currentUser] = await Promise.all([
+    fetch(`/api/assignments/${assignmentId}`),
+    fetchCurrentUserOptional().catch(() => null),
+  ]);
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || '加载作业详情失败');
@@ -75,6 +99,7 @@ async function loadAssignment() {
   document.getElementById('assignment-description').innerHTML =
     window.ojMarkdown.markdownToHtml(data.description_markdown || '');
 
+  bindEditButton(assignmentId, currentUser);
   renderProblemList(data, data.problems || []);
 }
 

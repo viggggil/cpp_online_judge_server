@@ -345,4 +345,303 @@ bool AssignmentRepository::assignment_contains_problem(
     return result->next();
 }
 
+void AssignmentRepository::update_assignment(
+    std::int64_t assignment_id,
+    const UpdateAssignmentRequest& request) const {
+    if (assignment_id <= 0) {
+        throw std::runtime_error("assignment_id must be positive");
+    }
+
+    if (!request.title &&
+        !request.description_markdown &&
+        !request.start_at &&
+        !request.end_at) {
+        throw std::runtime_error("nothing to update");
+    }
+
+    if (request.title) {
+        if (request.title->empty()) {
+            throw std::runtime_error("assignment title cannot be empty");
+        }
+        if (request.title->size() > 255) {
+            throw std::runtime_error("assignment title is too long");
+        }
+    }
+
+    if (request.description_markdown &&
+        request.description_markdown->size() > 1024 * 1024) {
+        throw std::runtime_error("assignment description is too large");
+    }
+
+    auto connection = mysql_client_.create_connection();
+
+    try {
+        connection->setAutoCommit(false);
+
+        std::string old_title;
+        std::string old_description;
+        std::int64_t old_start_at = 0;
+        std::int64_t old_end_at = 0;
+
+        {
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "SELECT title, description_markdown, start_at, end_at "
+                    "FROM assignments "
+                    "WHERE id = ? "
+                    "FOR UPDATE")
+            };
+
+            statement->setInt64(1, assignment_id);
+
+            auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+            if (!result->next()) {
+                throw std::runtime_error("assignment not found");
+            }
+
+            old_title = result->getString("title");
+            old_description = result->getString("description_markdown");
+            old_start_at = result->getInt64("start_at");
+            old_end_at = result->getInt64("end_at");
+        }
+
+        const auto now = now_unix_seconds();
+
+        const std::string new_title =
+            request.title ? *request.title : old_title;
+
+        const std::string new_description =
+            request.description_markdown
+                ? *request.description_markdown
+                : old_description;
+
+        std::int64_t new_start_at = old_start_at;
+        std::int64_t new_end_at = old_end_at;
+
+        if (request.start_at) {
+            if (now >= old_start_at) {
+                throw std::runtime_error("cannot change start_at after assignment started");
+            }
+
+            if (*request.start_at <= 0) {
+                throw std::runtime_error("start_at must be positive");
+            }
+
+            if (*request.start_at >= old_start_at) {
+                throw std::runtime_error("start_at can only be moved earlier");
+            }
+
+            new_start_at = *request.start_at;
+        }
+
+        if (request.end_at) {
+            if (*request.end_at <= old_end_at) {
+                throw std::runtime_error("end_at can only be extended");
+            }
+
+            new_end_at = *request.end_at;
+        }
+
+        if (new_end_at <= new_start_at) {
+            throw std::runtime_error("end_at must be greater than start_at");
+        }
+
+        {
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "UPDATE assignments "
+                    "SET title = ?, "
+                    "description_markdown = ?, "
+                    "start_at = ?, "
+                    "end_at = ?, "
+                    "updated_at = ? "
+                    "WHERE id = ?")
+            };
+
+            statement->setString(1, new_title);
+            statement->setString(2, new_description);
+            statement->setInt64(3, new_start_at);
+            statement->setInt64(4, new_end_at);
+            statement->setInt64(5, now);
+            statement->setInt64(6, assignment_id);
+            statement->executeUpdate();
+        }
+
+        connection->commit();
+        connection->setAutoCommit(true);
+    } catch (...) {
+        try {
+            connection->rollback();
+            connection->setAutoCommit(true);
+        } catch (...) {
+        }
+
+        throw;
+    }
+}
+
+void AssignmentRepository::add_assignment_problems(
+    std::int64_t assignment_id,
+    const std::vector<AssignmentProblemInput>& problems) const {
+    if (assignment_id <= 0) {
+        throw std::runtime_error("assignment_id must be positive");
+    }
+
+    if (problems.empty()) {
+        throw std::runtime_error("no problems to add");
+    }
+
+    std::set<std::int64_t> problem_ids;
+    std::set<std::string> aliases;
+
+    for (const auto& problem : problems) {
+        if (problem.problem_id <= 0) {
+            throw std::runtime_error("assignment problem_id must be positive");
+        }
+
+        if (!problem_ids.insert(problem.problem_id).second) {
+            throw std::runtime_error(
+                "duplicated problem_id in request: " +
+                std::to_string(problem.problem_id));
+        }
+
+        if (problem.alias.size() > 32) {
+            throw std::runtime_error("assignment problem alias is too long");
+        }
+
+        if (!problem.alias.empty() && !aliases.insert(problem.alias).second) {
+            throw std::runtime_error(
+                "duplicated assignment problem alias in request: " + problem.alias);
+        }
+    }
+
+    auto connection = mysql_client_.create_connection();
+
+    try {
+        connection->setAutoCommit(false);
+
+        std::int64_t end_at = 0;
+
+        {
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "SELECT end_at "
+                    "FROM assignments "
+                    "WHERE id = ? "
+                    "FOR UPDATE")
+            };
+
+            statement->setInt64(1, assignment_id);
+
+            auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+            if (!result->next()) {
+                throw std::runtime_error("assignment not found");
+            }
+
+            end_at = result->getInt64("end_at");
+        }
+
+        const auto now = now_unix_seconds();
+        if (now > end_at) {
+            throw std::runtime_error("cannot add problems to ended assignment");
+        }
+
+        int next_display_order = 1;
+
+        {
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "SELECT COALESCE(MAX(display_order), 0) AS max_order "
+                    "FROM assignment_problems "
+                    "WHERE assignment_id = ?")
+            };
+
+            statement->setInt64(1, assignment_id);
+
+            auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+            if (result->next()) {
+                next_display_order = result->getInt("max_order") + 1;
+            }
+        }
+
+        for (std::size_t i = 0; i < problems.size(); ++i) {
+            const auto& problem = problems[i];
+
+            if (!problem_exists(*connection, problem.problem_id)) {
+                throw std::runtime_error(
+                    "assignment problem not found: " +
+                    std::to_string(problem.problem_id));
+            }
+
+            if (assignment_contains_problem(assignment_id, problem.problem_id)) {
+                throw std::runtime_error(
+                    "problem already exists in assignment: " +
+                    std::to_string(problem.problem_id));
+            }
+
+            const int display_order = next_display_order++;
+            const std::string alias =
+                problem.alias.empty()
+                    ? default_alias_for_index(static_cast<std::size_t>(display_order - 1))
+                    : problem.alias;
+
+            {
+                auto statement = std::unique_ptr<sql::PreparedStatement>{
+                    connection->prepareStatement(
+                        "SELECT id "
+                        "FROM assignment_problems "
+                        "WHERE assignment_id = ? AND alias = ?")
+                };
+
+                statement->setInt64(1, assignment_id);
+                statement->setString(2, alias);
+
+                auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+                if (result->next()) {
+                    throw std::runtime_error(
+                        "assignment problem alias already exists: " + alias);
+                }
+            }
+
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "INSERT INTO assignment_problems "
+                    "(assignment_id, problem_id, display_order, alias) "
+                    "VALUES (?, ?, ?, ?)")
+            };
+
+            statement->setInt64(1, assignment_id);
+            statement->setInt64(2, problem.problem_id);
+            statement->setInt(3, display_order);
+            statement->setString(4, alias);
+            statement->executeUpdate();
+        }
+
+        {
+            auto statement = std::unique_ptr<sql::PreparedStatement>{
+                connection->prepareStatement(
+                    "UPDATE assignments "
+                    "SET updated_at = ? "
+                    "WHERE id = ?")
+            };
+
+            statement->setInt64(1, now);
+            statement->setInt64(2, assignment_id);
+            statement->executeUpdate();
+        }
+
+        connection->commit();
+        connection->setAutoCommit(true);
+    } catch (...) {
+        try {
+            connection->rollback();
+            connection->setAutoCommit(true);
+        } catch (...) {
+        }
+
+        throw;
+    }
+}
+
+
 } // namespace oj::server

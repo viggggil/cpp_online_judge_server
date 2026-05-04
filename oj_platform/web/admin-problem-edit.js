@@ -263,9 +263,12 @@ async function appendTestcaseFile(problemId) {
   setAppendTestcaseStatus('正在上传测试数据文件...');
 
   try {
-    const response = await window.ojAuth.authFetch(`/api/admin/problems/${problemId}/testcase-file`, {
+    const response = await window.ojAuth.authFetch(`/api/admin/problems/${problemId}/testcases/file?filename=${encodeURIComponent(file.name)}`, {
       method: 'POST',
-      body: formData,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+      body: file,
     });
     const data = await response.json();
     if (!response.ok) {

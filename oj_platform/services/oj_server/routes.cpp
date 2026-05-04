@@ -10,6 +10,7 @@
 
 #include <crow.h>
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -25,6 +26,12 @@ namespace oj::server {
 namespace {
 
 constexpr auto kProblemListCacheKey = "oj:problems:list";
+
+std::int64_t unix_now_seconds() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
 
 std::string extract_bearer_token(const crow::request& req) {
     const auto auth_header = req.get_header_value("Authorization");
@@ -76,30 +83,6 @@ crow::response json_error(int code, const std::string& message) {
     crow::json::wvalue body;
     body["error"] = message;
     return crow::response{code, body};
-}
-
-std::optional<std::pair<std::string, std::string>> extract_uploaded_file(
-    const crow::request& req,
-    std::string* error_message = nullptr) {
-    try {
-        crow::multipart::message multipart(req);
-        const auto part = multipart.get_part_by_name("file");
-        const auto content_disposition = part.get_header_object("Content-Disposition");
-        const auto filename_it = content_disposition.params.find("filename");
-        if (filename_it == content_disposition.params.end()) {
-            if (error_message != nullptr) {
-                *error_message = "uploaded file must include filename";
-            }
-            return std::nullopt;
-        }
-
-        return std::make_pair(filename_it->second, part.body);
-    } catch (const std::exception& ex) {
-        if (error_message != nullptr) {
-            *error_message = ex.what();
-        }
-        return std::nullopt;
-    }
 }
 
 crow::json::wvalue make_auth_json(const std::string& token,
@@ -334,6 +317,10 @@ void register_routes(crow::Crow<>& app) {
         return serve_file(resolve_web_path(std::filesystem::path{"web"} / "admin-assignment-create.html"));
     });
 
+    CROW_ROUTE(app, "/web/admin-assignment-edit.html")([] {
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "admin-assignment-edit.html"));
+    });
+
     CROW_ROUTE(app, "/web/admin-problem-create.html")([] {
         return serve_file(resolve_web_path(std::filesystem::path{"web"} / "admin-problem-create.html"));
     });
@@ -491,39 +478,52 @@ void register_routes(crow::Crow<>& app) {
         }
 
         const auto json = crow::json::load(req.body);
-        if (!json) {
-            return json_error(400, "invalid json payload");
+        if (!json || !json.has("problem_id") || !json.has("language") ||
+            !json.has("source_code")) {
+            return json_error(400, "problem_id, language and source_code are required");
         }
 
-        oj::common::SubmissionRequest request{
-            json["problem_id"].s(),
-            json["language"].s(),
-            json["source_code"].s()};
+        try {
+            oj::common::SubmissionRequest request{
+                json["problem_id"].s(),
+                json["language"].s(),
+                json["source_code"].s()};
 
-        if (json.has("assignment_id")) {
-            const auto assignment_id = json["assignment_id"].i();
-            const auto problem_id = std::stoll(request.problem_id);
-            AssignmentRepository assignment_repository;
+            if (json.has("assignment_id")) {
+                const std::string assignment_id_text = json["assignment_id"].s();
+                if (!assignment_id_text.empty()) {
+                    const auto assignment_id = std::stoll(assignment_id_text);
+                    const auto problem_id = std::stoll(request.problem_id);
 
-            const auto assignment = assignment_repository.find_assignment_detail(assignment_id);
-            if (!assignment) {
-                return json_error(400, "assignment not found");
+                    AssignmentRepository repository;
+                    const auto detail = repository.find_assignment_detail(assignment_id);
+                    if (!detail) {
+                        return json_error(404, "assignment not found");
+                    }
+
+                    bool contains_problem = false;
+                    for (const auto& problem : detail->problems) {
+                        if (problem.problem_id == problem_id) {
+                            contains_problem = true;
+                            break;
+                        }
+                    }
+                    if (!contains_problem) {
+                        return json_error(400, "problem does not belong to assignment");
+                    }
+
+                    if (unix_now_seconds() < detail->start_at) {
+                        return json_error(400, "assignment has not started");
+                    }
+                }
             }
 
-            if (!assignment_repository.assignment_contains_problem(assignment_id, problem_id)) {
-                return json_error(400, "problem does not belong to the assignment");
-            }
-
-            const auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            if (now < assignment->start_at) {
-                return json_error(400, "assignment has not started");
-            }
+            JudgeService judge_service;
+            const auto result = judge_service.submit(user->username, request);
+            return crow::response{202, make_submission_json(result)};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
         }
-
-        JudgeService judge_service;
-        const auto result = judge_service.submit(user->username, request);
-        return crow::response{202, make_submission_json(result)};
     });
 
     CROW_ROUTE(app, "/api/submissions").methods(crow::HTTPMethod::GET)([](const crow::request& req) {
@@ -603,77 +603,6 @@ void register_routes(crow::Crow<>& app) {
             body["ok"] = true;
             body["problem_id"] = problem_id;
             body["language"] = language;
-            return crow::response{200, body};
-        } catch (const std::exception& ex) {
-            return json_error(400, ex.what());
-        }
-    });
-    CROW_ROUTE(app, "/api/admin/problems").methods(crow::HTTPMethod::POST)([](const crow::request& req) {
-        const auto admin = require_admin(req);
-        if (!admin) {
-            return json_error(403, "admin only");
-        }
-
-        const auto json = crow::json::load(req.body);
-        if (!json || !json.has("problem_id") || !json.has("title") ||
-            !json.has("time_limit_ms") || !json.has("memory_limit_mb") ||
-            !json.has("statement_markdown")) {
-            return json_error(400, "problem_id, title, time_limit_ms, memory_limit_mb and statement_markdown are required");
-        }
-
-        try {
-            const auto problem_id = json["problem_id"].i();
-            const auto time_limit_ms = json["time_limit_ms"].i();
-            const auto memory_limit_mb = json["memory_limit_mb"].i();
-            const std::string title = json["title"].s();
-            const std::string statement_markdown = json["statement_markdown"].s();
-
-            if (problem_id <= 0) {
-                return json_error(400, "problem_id must be positive");
-            }
-            if (title.empty()) {
-                return json_error(400, "title cannot be empty");
-            }
-            if (title.size() > 128) {
-                return json_error(400, "title is too long");
-            }
-            if (time_limit_ms <= 0) {
-                return json_error(400, "time_limit_ms must be positive");
-            }
-            if (memory_limit_mb <= 0) {
-                return json_error(400, "memory_limit_mb must be positive");
-            }
-            if (time_limit_ms > 60 * 1000) {
-                return json_error(400, "time_limit_ms is too large");
-            }
-            if (memory_limit_mb > 4096) {
-                return json_error(400, "memory_limit_mb is too large");
-            }
-            if (statement_markdown.empty()) {
-                return json_error(400, "statement_markdown cannot be empty");
-            }
-            if (statement_markdown.size() > 1024 * 1024) {
-                return json_error(400, "statement_markdown is too large");
-            }
-
-            ProblemRepository repository;
-            repository.create_problem(
-                problem_id,
-                title,
-                time_limit_ms,
-                memory_limit_mb,
-                statement_markdown);
-
-            const oj::common::RedisConfig redis_config{};
-            RedisClient redis_client{redis_config};
-            redis_client.del(kProblemListCacheKey);
-
-            crow::json::wvalue body;
-            body["ok"] = true;
-            body["problem_id"] = problem_id;
-            body["title"] = title;
-            body["time_limit_ms"] = time_limit_ms;
-            body["memory_limit_mb"] = memory_limit_mb;
             return crow::response{200, body};
         } catch (const std::exception& ex) {
             return json_error(400, ex.what());
@@ -770,6 +699,7 @@ void register_routes(crow::Crow<>& app) {
             return json_error(400, ex.what());
         }
     });
+
     CROW_ROUTE(app, "/api/admin/problems/<int>/limits").methods(crow::HTTPMethod::PUT)([](const crow::request& req, std::int64_t problem_id) {
         const auto admin = require_admin(req);
         if (!admin) {
@@ -785,20 +715,12 @@ void register_routes(crow::Crow<>& app) {
             const auto time_limit_ms = json["time_limit_ms"].i();
             const auto memory_limit_mb = json["memory_limit_mb"].i();
 
-            if (time_limit_ms <= 0) {
-                return json_error(400, "time_limit_ms must be positive");
+            if (time_limit_ms <= 0 || time_limit_ms > 60000) {
+                return json_error(400, "time_limit_ms must be between 1 and 60000");
             }
 
-            if (memory_limit_mb <= 0) {
-                return json_error(400, "memory_limit_mb must be positive");
-            }
-
-            if (time_limit_ms > 60 * 1000) {
-                return json_error(400, "time_limit_ms is too large");
-            }
-
-            if (memory_limit_mb > 4096) {
-                return json_error(400, "memory_limit_mb is too large");
+            if (memory_limit_mb <= 0 || memory_limit_mb > 4096) {
+                return json_error(400, "memory_limit_mb must be between 1 and 4096");
             }
 
             ProblemRepository repository;
@@ -818,6 +740,7 @@ void register_routes(crow::Crow<>& app) {
             return json_error(400, ex.what());
         }
     });
+
     CROW_ROUTE(app, "/api/admin/problems/import").methods(crow::HTTPMethod::POST)([](const crow::request& req) {
         const auto admin = require_admin(req);
         if (!admin) {
@@ -854,27 +777,28 @@ void register_routes(crow::Crow<>& app) {
             return json_error(400, ex.what());
         }
     });
-
-    CROW_ROUTE(app, "/api/admin/problems/<int>/testcase-file").methods(crow::HTTPMethod::POST)([](
-        const crow::request& req,
-        std::int64_t problem_id) {
+    
+    CROW_ROUTE(app, "/api/admin/problems/<int>/testcases/file").methods(crow::HTTPMethod::POST)([](const crow::request& req, std::int64_t problem_id) {
         const auto admin = require_admin(req);
         if (!admin) {
             return json_error(403, "admin only");
         }
 
-        std::string multipart_error;
-        const auto uploaded_file = extract_uploaded_file(req, &multipart_error);
-        if (!uploaded_file) {
-            return json_error(400, multipart_error.empty() ? "file upload is required" : multipart_error);
+        const auto filename_param = req.url_params.get("filename");
+        if (filename_param == nullptr || std::string{filename_param}.empty()) {
+            return json_error(400, "filename is required");
+        }
+
+        if (req.body.empty()) {
+            return json_error(400, "file body is required");
         }
 
         try {
             ProblemImporter importer;
             const auto result = importer.append_testcase_file_body(
                 problem_id,
-                uploaded_file->first,
-                uploaded_file->second);
+                filename_param,
+                req.body);
 
             crow::json::wvalue body;
             body["ok"] = true;
@@ -883,75 +807,95 @@ void register_routes(crow::Crow<>& app) {
             body["filename"] = result.filename;
             body["paired"] = result.paired;
             body["message"] = result.message;
+
             return crow::response{200, body};
         } catch (const std::exception& ex) {
             return json_error(400, ex.what());
         }
     });
 
-    CROW_ROUTE(app, "/api/admin/assignments").methods(crow::HTTPMethod::POST)([](
-        const crow::request& req) {
+    CROW_ROUTE(app, "/api/admin/problems").methods(crow::HTTPMethod::POST)([](const crow::request& req) {
         const auto admin = require_admin(req);
         if (!admin) {
             return json_error(403, "admin only");
         }
 
         const auto json = crow::json::load(req.body);
-        if (!json || !json.has("title") || !json.has("description_markdown") ||
-            !json.has("start_at") || !json.has("end_at") || !json.has("problems")) {
-            return json_error(400, "title, description_markdown, start_at, end_at and problems are required");
+        if (!json ||
+            !json.has("problem_id") ||
+            !json.has("title") ||
+            !json.has("statement_markdown") ||
+            !json.has("time_limit_ms") ||
+            !json.has("memory_limit_mb")) {
+            return json_error(400, "problem_id, title, statement_markdown, time_limit_ms and memory_limit_mb are required");
         }
 
         try {
+            const auto problem_id = json["problem_id"].i();
             const std::string title = json["title"].s();
-            const std::string description_markdown = json["description_markdown"].s();
-            const auto start_at = json["start_at"].i();
-            const auto end_at = json["end_at"].i();
-            const auto problem_items = json["problems"].lo();
+            const std::string statement_markdown = json["statement_markdown"].s();
+            const auto time_limit_ms = json["time_limit_ms"].i();
+            const auto memory_limit_mb = json["memory_limit_mb"].i();
 
-            if (title.empty()) {
-                return json_error(400, "title cannot be empty");
-            }
-            if (title.size() > 255) {
-                return json_error(400, "title is too long");
-            }
-            if (description_markdown.size() > 1024 * 1024) {
-                return json_error(400, "description_markdown is too large");
-            }
-            if (start_at <= 0) {
-                return json_error(400, "start_at must be positive");
-            }
-            if (end_at <= start_at) {
-                return json_error(400, "end_at must be greater than start_at");
-            }
-            if (problem_items.empty()) {
-                return json_error(400, "assignment must contain at least one problem");
-            }
+            ProblemRepository repository;
+            repository.create_problem(
+                problem_id,
+                title,
+                time_limit_ms,
+                memory_limit_mb,
+                statement_markdown);
 
-            MySqlClient mysql_client;
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            redis_client.del(kProblemListCacheKey);
+
+            crow::json::wvalue body;
+            body["ok"] = true;
+            body["problem_id"] = problem_id;
+            body["title"] = title;
+            body["time_limit_ms"] = time_limit_ms;
+            body["memory_limit_mb"] = memory_limit_mb;
+
+            return crow::response{201, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+    CROW_ROUTE(app, "/api/admin/assignments").methods(crow::HTTPMethod::POST)([](const crow::request& req) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        const auto json = crow::json::load(req.body);
+        if (!json ||
+            !json.has("title") ||
+            !json.has("description_markdown") ||
+            !json.has("start_at") ||
+            !json.has("end_at") ||
+            !json.has("problem_ids")) {
+            return json_error(
+                400,
+                "title, description_markdown, start_at, end_at and problem_ids are required");
+        }
+
+        try {
+            CreateAssignmentRequest request;
+            request.title = json["title"].s();
+            request.description_markdown = json["description_markdown"].s();
+            request.start_at = json["start_at"].i();
+            request.end_at = json["end_at"].i();
+            const MySqlClient mysql_client;
             const auto created_by = find_user_id_by_username(mysql_client, admin->username);
             if (!created_by) {
                 return json_error(400, "admin user not found");
             }
-
-            CreateAssignmentRequest request;
-            request.title = title;
-            request.description_markdown = description_markdown;
-            request.start_at = start_at;
-            request.end_at = end_at;
             request.created_by = *created_by;
 
-            for (const auto& item : problem_items) {
-                if (!item.has("problem_id")) {
-                    return json_error(400, "assignment problem_id is required");
-                }
-
-                AssignmentProblemInput input;
-                input.problem_id = item["problem_id"].i();
-                if (item.has("alias")) {
-                    input.alias = item["alias"].s();
-                }
-                request.problems.push_back(std::move(input));
+            for (const auto& item : json["problem_ids"]) {
+                AssignmentProblemInput problem;
+                problem.problem_id = item.i();
+                request.problems.push_back(std::move(problem));
             }
 
             AssignmentRepository repository;
@@ -962,11 +906,127 @@ void register_routes(crow::Crow<>& app) {
             body["assignment_id"] = assignment_id;
             body["title"] = request.title;
             body["problem_count"] = static_cast<int>(request.problems.size());
+
+            return crow::response{201, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+
+    CROW_ROUTE(app, "/api/admin/assignments/<int>").methods(crow::HTTPMethod::PATCH)([](const crow::request& req, std::int64_t assignment_id) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        const auto json = crow::json::load(req.body);
+        if (!json) {
+            return json_error(400, "invalid json body");
+        }
+
+        try {
+            AssignmentRepository repository;
+            const auto current_detail = repository.find_assignment_detail(assignment_id);
+            if (!current_detail) {
+                return json_error(404, "assignment not found");
+            }
+
+            UpdateAssignmentRequest request;
+
+            if (json.has("title")) {
+                const std::string title = json["title"].s();
+                if (title != current_detail->title) {
+                    request.title = title;
+                }
+            }
+
+            if (json.has("description_markdown")) {
+                const std::string description_markdown = json["description_markdown"].s();
+                if (description_markdown != current_detail->description_markdown) {
+                    request.description_markdown = description_markdown;
+                }
+            }
+
+            if (json.has("start_at")) {
+                const auto start_at = json["start_at"].i();
+                if (start_at != current_detail->start_at) {
+                    request.start_at = start_at;
+                }
+            }
+
+            if (json.has("end_at")) {
+                const auto end_at = json["end_at"].i();
+                if (end_at != current_detail->end_at) {
+                    request.end_at = end_at;
+                }
+            }
+
+            if (request.title ||
+                request.description_markdown ||
+                request.start_at ||
+                request.end_at) {
+                repository.update_assignment(assignment_id, request);
+            }
+
+            const auto detail = repository.find_assignment_detail(assignment_id);
+            if (!detail) {
+                return json_error(404, "assignment not found");
+            }
+
+            crow::json::wvalue body;
+            body["ok"] = true;
+            body["assignment_id"] = assignment_id;
+            body["title"] = detail->title;
+            body["start_at"] = detail->start_at;
+            body["end_at"] = detail->end_at;
+
             return crow::response{200, body};
         } catch (const std::exception& ex) {
             return json_error(400, ex.what());
         }
     });
+
+    CROW_ROUTE(app, "/api/admin/assignments/<int>/problems").methods(crow::HTTPMethod::POST)([](const crow::request& req, std::int64_t assignment_id) {
+        const auto admin = require_admin(req);
+        if (!admin) {
+            return json_error(403, "admin only");
+        }
+
+        const auto json = crow::json::load(req.body);
+        if (!json || !json.has("problem_ids")) {
+            return json_error(400, "problem_ids is required");
+        }
+
+        try {
+            std::vector<AssignmentProblemInput> problems;
+
+            const auto problem_ids = json["problem_ids"];
+            for (std::size_t i = 0; i < problem_ids.size(); ++i) {
+                AssignmentProblemInput item;
+                item.problem_id = problem_ids[i].i();
+                problems.push_back(std::move(item));
+            }
+
+            AssignmentRepository repository;
+            repository.add_assignment_problems(assignment_id, problems);
+
+            const auto detail = repository.find_assignment_detail(assignment_id);
+            if (!detail) {
+                return json_error(404, "assignment not found");
+            }
+
+            crow::json::wvalue body;
+            body["ok"] = true;
+            body["assignment_id"] = assignment_id;
+            body["added_count"] = static_cast<int>(problems.size());
+            body["problem_count"] = static_cast<int>(detail->problems.size());
+
+            return crow::response{200, body};
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+
 
 
 }

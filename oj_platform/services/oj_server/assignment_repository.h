@@ -53,6 +53,13 @@ struct AssignmentDetail {
     std::vector<AssignmentProblemItem> problems;
 };
 
+struct UpdateAssignmentRequest {
+    std::optional<std::string> title;
+    std::optional<std::string> description_markdown;
+    std::optional<std::int64_t> start_at;
+    std::optional<std::int64_t> end_at;
+};
+
 class AssignmentRepository {
 public:
     AssignmentRepository();
@@ -70,6 +77,13 @@ public:
     bool assignment_contains_problem(
         std::int64_t assignment_id,
         std::int64_t problem_id) const;
+    void update_assignment(
+        std::int64_t assignment_id,
+        const UpdateAssignmentRequest& request) const;
+
+    void add_assignment_problems(
+        std::int64_t assignment_id,
+        const std::vector<AssignmentProblemInput>& problems) const;
 
 private:
     MySqlClient mysql_client_;
