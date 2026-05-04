@@ -26,11 +26,25 @@ namespace oj::server {
 namespace {
 
 constexpr auto kProblemListCacheKey = "oj:problems:list";
+constexpr auto kAssignmentListCacheKey = "oj:assignments:list";
 
 std::int64_t unix_now_seconds() {
     return std::chrono::duration_cast<std::chrono::seconds>(
                std::chrono::system_clock::now().time_since_epoch())
         .count();
+}
+
+std::string assignment_detail_cache_key(std::int64_t assignment_id) {
+    return "oj:assignments:detail:" + std::to_string(assignment_id);
+}
+
+void invalidate_assignment_cache(
+    const RedisClient& redis_client,
+    std::int64_t assignment_id) {
+    redis_client.del(kAssignmentListCacheKey);
+    if (assignment_id > 0) {
+        redis_client.del(assignment_detail_cache_key(assignment_id));
+    }
 }
 
 std::string extract_bearer_token(const crow::request& req) {
@@ -366,8 +380,33 @@ void register_routes(crow::Crow<>& app) {
 
     CROW_ROUTE(app, "/api/assignments").methods(crow::HTTPMethod::GET)([] {
         try {
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+
+            if (const auto cached = redis_client.get(kAssignmentListCacheKey); cached) {
+                crow::response resp;
+                resp.code = 200;
+                resp.set_header("Content-Type", "application/json; charset=utf-8");
+                resp.set_header("X-Cache", "HIT");
+                resp.body = *cached;
+                return resp;
+            }
+
             AssignmentRepository repository;
-            return crow::response{200, make_assignment_list_json(repository.list_assignments())};
+            const auto body = make_assignment_list_json(repository.list_assignments());
+            const auto payload = body.dump();
+
+            redis_client.setex(
+                kAssignmentListCacheKey,
+                redis_config.assignment_list_ttl_seconds,
+                payload);
+
+            crow::response resp;
+            resp.code = 200;
+            resp.set_header("Content-Type", "application/json; charset=utf-8");
+            resp.set_header("X-Cache", "MISS");
+            resp.body = payload;
+            return resp;
         } catch (const std::exception& ex) {
             return json_error(400, ex.what());
         }
@@ -376,12 +415,39 @@ void register_routes(crow::Crow<>& app) {
     CROW_ROUTE(app, "/api/assignments/<int>").methods(crow::HTTPMethod::GET)([](
         std::int64_t assignment_id) {
         try {
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            const auto cache_key = assignment_detail_cache_key(assignment_id);
+
+            if (const auto cached = redis_client.get(cache_key); cached) {
+                crow::response resp;
+                resp.code = 200;
+                resp.set_header("Content-Type", "application/json; charset=utf-8");
+                resp.set_header("X-Cache", "HIT");
+                resp.body = *cached;
+                return resp;
+            }
+
             AssignmentRepository repository;
             const auto detail = repository.find_assignment_detail(assignment_id);
             if (!detail) {
                 return json_error(404, "assignment not found");
             }
-            return crow::response{200, make_assignment_detail_json(*detail)};
+
+            const auto body = make_assignment_detail_json(*detail);
+            const auto payload = body.dump();
+
+            redis_client.setex(
+                cache_key,
+                redis_config.assignment_detail_ttl_seconds,
+                payload);
+
+            crow::response resp;
+            resp.code = 200;
+            resp.set_header("Content-Type", "application/json; charset=utf-8");
+            resp.set_header("X-Cache", "MISS");
+            resp.body = payload;
+            return resp;
         } catch (const std::exception& ex) {
             return json_error(400, ex.what());
         }
@@ -901,6 +967,10 @@ void register_routes(crow::Crow<>& app) {
             AssignmentRepository repository;
             const auto assignment_id = repository.create_assignment(request);
 
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            invalidate_assignment_cache(redis_client, assignment_id);
+
             crow::json::wvalue body;
             body["ok"] = true;
             body["assignment_id"] = assignment_id;
@@ -968,6 +1038,10 @@ void register_routes(crow::Crow<>& app) {
                 repository.update_assignment(assignment_id, request);
             }
 
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            invalidate_assignment_cache(redis_client, assignment_id);
+
             const auto detail = repository.find_assignment_detail(assignment_id);
             if (!detail) {
                 return json_error(404, "assignment not found");
@@ -1009,6 +1083,10 @@ void register_routes(crow::Crow<>& app) {
 
             AssignmentRepository repository;
             repository.add_assignment_problems(assignment_id, problems);
+
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            invalidate_assignment_cache(redis_client, assignment_id);
 
             const auto detail = repository.find_assignment_detail(assignment_id);
             if (!detail) {

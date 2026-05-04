@@ -39,6 +39,8 @@ struct RedisConfig {
     const char* password{env_or_default("OJ_REDIS_PASSWORD", "")};
     int socket_timeout_ms{env_int_or_default("OJ_REDIS_TIMEOUT_MS", 5000)};
     long long problem_list_ttl_seconds{env_int_or_default("OJ_PROBLEM_LIST_TTL_SECONDS", 60)};
+    long long assignment_list_ttl_seconds{env_int_or_default("OJ_ASSIGNMENT_LIST_TTL_SECONDS", 60)};
+    long long assignment_detail_ttl_seconds{env_int_or_default("OJ_ASSIGNMENT_DETAIL_TTL_SECONDS", 60)};
     const char* submission_queue_key{env_or_default("OJ_SUBMISSION_QUEUE_KEY", "oj:queue:submissions")};
 };
 
