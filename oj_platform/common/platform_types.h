@@ -44,6 +44,19 @@ struct SubmissionListItem {
     std::int32_t peak_memory_used_kb{0};
 };
 
+struct ProblemUserStatus {
+    std::string problem_id;
+
+    // NONE / ACCEPTED / WRONG_ANSWER / COMPILE_ERROR / RUNTIME_ERROR / ...
+    std::string status{"NONE"};
+
+    bool has_submission{false};
+    bool accepted{false};
+
+    // Unix timestamp seconds; 0 表示没有提交
+    std::int64_t last_submitted_at{0};
+};
+
 struct SubmissionQueueTask {
     std::string submission_id;
     std::string problem_id;

@@ -430,6 +430,28 @@ body {
   min-height: 220px;
 }
 
+.problem-status-line,
+.problem-status-time {
+  margin: 6px 0 0;
+}
+
+.problem-status-text {
+  font-weight: 700;
+}
+
+.problem-status-none {
+  color: #ffffff;
+  text-shadow: 0 0 1px rgba(17, 24, 39, 0.9), 0 0 2px rgba(17, 24, 39, 0.55);
+}
+
+.problem-status-accepted {
+  color: #059669;
+}
+
+.problem-status-failed {
+  color: #dc2626;
+}
+
 .danger-button {
   background: #dc2626;
 }

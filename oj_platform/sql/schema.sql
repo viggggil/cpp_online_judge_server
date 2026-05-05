@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     created_at BIGINT NOT NULL,
     updated_at BIGINT NOT NULL,
     KEY idx_submissions_user_created (user_id, created_at DESC),
+    KEY idx_submissions_user_problem_created (user_id, problem_id, created_at DESC, id DESC),
     KEY idx_submissions_problem_created (problem_id, created_at DESC),
     CONSTRAINT fk_submissions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_submissions_problem FOREIGN KEY (problem_id) REFERENCES problems(id) 

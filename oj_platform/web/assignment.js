@@ -14,6 +14,53 @@ function formatTimestamp(timestamp) {
   return new Date(timestamp * 1000).toLocaleString('zh-CN');
 }
 
+function normalizeStatusText(status) {
+  const value = String(status || 'NONE').toUpperCase();
+  if (value === 'NONE') return '未提交';
+  if (value === 'ACCEPTED' || value === 'OK') return 'Accepted';
+  if (value === 'WRONG_ANSWER') return 'Wrong Answer';
+  if (value === 'COMPILE_ERROR') return 'Compile Error';
+  if (value === 'RUNTIME_ERROR') return 'Runtime Error';
+  if (value === 'TIME_LIMIT_EXCEEDED') return 'Time Limit Exceeded';
+  if (value === 'MEMORY_LIMIT_EXCEEDED') return 'Memory Limit Exceeded';
+  if (value === 'OUTPUT_LIMIT_EXCEEDED') return 'Output Limit Exceeded';
+  if (value === 'PRESENTATION_ERROR') return 'Presentation Error';
+  if (value === 'SYSTEM_ERROR') return 'System Error';
+  if (value === 'RUNNING') return 'Running';
+  if (value === 'QUEUED') return 'Queued';
+  return value.replaceAll('_', ' ');
+}
+
+function buildStatusMap(statuses) {
+  const map = new Map();
+  (statuses || []).forEach((status) => {
+    map.set(String(status.problem_id), status);
+  });
+  return map;
+}
+
+function renderProblemStatusMeta(status) {
+  if (!status || !status.has_submission) {
+    return `
+      <p class="problem-status-line">
+        状态：<span class="problem-status-text problem-status-none">未提交</span>
+      </p>
+      <p class="problem-status-time">最后提交时间：-</p>
+    `;
+  }
+
+  const cssClass = status.accepted
+    ? 'problem-status-accepted'
+    : 'problem-status-failed';
+
+  return `
+    <p class="problem-status-line">
+      状态：<span class="problem-status-text ${cssClass}">${normalizeStatusText(status.status)}</span>
+    </p>
+    <p class="problem-status-time">最后提交时间：${formatTimestamp(status.last_submitted_at)}</p>
+  `;
+}
+
 function bindEditButton(assignmentId, currentUser) {
   const editButton = document.getElementById('edit-assignment-btn');
   if (!editButton) {
@@ -35,7 +82,7 @@ function isAssignmentStarted(startAt) {
   return Math.floor(Date.now() / 1000) >= startAt;
 }
 
-function renderProblemList(assignment, problems) {
+function renderProblemList(assignment, problems, statusMap) {
   const container = document.getElementById('assignment-problems');
   if (!problems.length) {
     container.textContent = '当前作业还没有题目。';
@@ -45,6 +92,7 @@ function renderProblemList(assignment, problems) {
   const started = isAssignmentStarted(assignment.start_at);
   container.innerHTML = '';
   problems.forEach((problem) => {
+    const status = statusMap.get(String(problem.problem_id));
     const item = document.createElement('div');
     const problemHref = `/problems/${problem.problem_id}?assignment_id=${encodeURIComponent(assignment.id)}`;
     const submitHref = `/submit/${problem.problem_id}?assignment_id=${encodeURIComponent(assignment.id)}`;
@@ -52,6 +100,7 @@ function renderProblemList(assignment, problems) {
     item.innerHTML = `
       <h3>${problem.alias || '-'} - ${problem.problem_id}</h3>
       <p>${problem.title}</p>
+      ${renderProblemStatusMeta(status)}
       <div class="actions compact-actions">
         <a class="button problem-link" href="${problemHref}">查看题目</a>
         <a class="button auth-btn-secondary submit-link ${started ? '' : 'button-disabled'}" href="${submitHref}" aria-disabled="${started ? 'false' : 'true'}">去提交</a>
@@ -79,14 +128,32 @@ function renderProblemList(assignment, problems) {
   });
 }
 
+async function loadProblemStatusesIfAvailable() {
+  if (!window.ojAuth.isLoggedIn()) {
+    return new Map();
+  }
+
+  try {
+    const response = await window.ojAuth.authFetch('/api/problems/my-status');
+    if (!response.ok) {
+      return new Map();
+    }
+    const data = await response.json();
+    return buildStatusMap(data.statuses || []);
+  } catch (_) {
+    return new Map();
+  }
+}
+
 async function loadAssignment() {
   await window.ojAuth.initAuth();
   window.ojNav.bindProtectedNavigation();
 
   const assignmentId = assignmentIdFromPath();
-  const [response, currentUser] = await Promise.all([
+  const [response, currentUser, statusMap] = await Promise.all([
     fetch(`/api/assignments/${assignmentId}`),
     fetchCurrentUserOptional().catch(() => null),
+    loadProblemStatusesIfAvailable(),
   ]);
   const data = await response.json();
   if (!response.ok) {
@@ -100,7 +167,7 @@ async function loadAssignment() {
     window.ojMarkdown.markdownToHtml(data.description_markdown || '');
 
   bindEditButton(assignmentId, currentUser);
-  renderProblemList(data, data.problems || []);
+  renderProblemList(data, data.problems || [], statusMap);
 }
 
 loadAssignment().catch((error) => {

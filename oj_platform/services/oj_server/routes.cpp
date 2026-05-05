@@ -4,9 +4,10 @@
 #include "services/oj_server/assignment_repository.h"
 #include "services/oj_server/auth_service.h"
 #include "services/oj_server/judge_service.h"
+#include "services/oj_server/problem_importer.h"
 #include "services/oj_server/problem_repository.h"
 #include "services/oj_server/redis_client.h"
-#include "services/oj_server/problem_importer.h"
+#include "services/oj_server/submission_repository.h"
 
 #include <crow.h>
 
@@ -240,6 +241,25 @@ crow::json::wvalue make_problem_list_json(const std::vector<oj::common::ProblemS
     return body;
 }
 
+crow::json::wvalue make_problem_status_list_json(
+    const std::vector<oj::common::ProblemUserStatus>& statuses) {
+    crow::json::wvalue::list items;
+
+    for (const auto& status : statuses) {
+        crow::json::wvalue item;
+        item["problem_id"] = status.problem_id;
+        item["status"] = status.status;
+        item["has_submission"] = status.has_submission;
+        item["accepted"] = status.accepted;
+        item["last_submitted_at"] = status.last_submitted_at;
+        items.push_back(std::move(item));
+    }
+
+    crow::json::wvalue body;
+    body["statuses"] = std::move(items);
+    return body;
+}
+
 crow::json::wvalue make_assignment_summary_json(
     const AssignmentSummary& assignment) {
     crow::json::wvalue item;
@@ -377,6 +397,24 @@ void register_routes(crow::Crow<>& app) {
         resp.body = payload;
         return resp;
     });
+
+    CROW_ROUTE(app, "/api/problems/my-status")
+        .methods(crow::HTTPMethod::GET)([](const crow::request& req) {
+            const auto user = require_user(req);
+            if (!user) {
+                return json_error(401, "please login first");
+            }
+
+            try {
+                SubmissionRepository repository;
+                const auto statuses =
+                    repository.list_problem_statuses_for_user(user->username);
+
+                return crow::response{200, make_problem_status_list_json(statuses)};
+            } catch (const std::exception& ex) {
+                return json_error(400, ex.what());
+            }
+        });
 
     CROW_ROUTE(app, "/api/assignments").methods(crow::HTTPMethod::GET)([] {
         try {

@@ -4,6 +4,7 @@
 #include <cppconn/resultset.h>
 
 #include <chrono>
+#include <map>
 #include <stdexcept>
 
 namespace oj::server {
@@ -255,5 +256,65 @@ std::vector<oj::common::SubmissionListItem> SubmissionRepository::list_submissio
     }
     return items;
 }
+
+std::vector<oj::common::ProblemUserStatus>
+SubmissionRepository::list_problem_statuses_for_user(const std::string& username) const {
+    auto connection = mysql_client_.create_connection();
+
+    const auto user_id = find_user_id(*connection, username);
+    if (!user_id) {
+        return {};
+    }
+
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "SELECT problem_id, final_status, accepted, created_at "
+            "FROM submissions "
+            "WHERE user_id = ? "
+            "ORDER BY problem_id ASC, created_at DESC, id DESC")
+    };
+
+    statement->setInt64(1, *user_id);
+
+    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+
+    std::map<std::string, oj::common::ProblemUserStatus> by_problem;
+
+    while (result->next()) {
+        const std::string problem_id =
+            std::to_string(result->getInt64("problem_id"));
+
+        const std::string final_status = result->getString("final_status");
+        const bool accepted = result->getBoolean("accepted");
+        const auto created_at = result->getInt64("created_at");
+
+        auto iter = by_problem.find(problem_id);
+
+        if (iter == by_problem.end()) {
+            oj::common::ProblemUserStatus status;
+            status.problem_id = problem_id;
+            status.has_submission = true;
+            status.status = final_status;
+            status.accepted = false;
+            status.last_submitted_at = created_at;
+
+            iter = by_problem.emplace(problem_id, std::move(status)).first;
+        }
+        if (accepted) {
+            iter->second.accepted = true;
+            iter->second.status = "ACCEPTED";
+        }
+    }
+
+    std::vector<oj::common::ProblemUserStatus> items;
+    items.reserve(by_problem.size());
+
+    for (auto& entry : by_problem) {
+        items.push_back(std::move(entry.second));
+    }
+
+    return items;
+}
+
 
 } // namespace oj::server

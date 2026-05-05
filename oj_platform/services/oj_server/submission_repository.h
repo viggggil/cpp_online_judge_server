@@ -30,10 +30,10 @@ public:
     void update_submission(const oj::common::SubmissionResult& result) const;
 
     std::optional<StoredSubmission> find_submission(const std::string& submission_id) const;
-    std::optional<StoredSubmission> find_submission_for_user(const std::string& submission_id,
-                                                             const std::string& username) const;
-    std::vector<oj::common::SubmissionListItem> list_submissions_for_user(const std::string& username,
-                                                                          std::size_t limit = 50) const;
+    std::optional<StoredSubmission> find_submission_for_user(const std::string& submission_id,const std::string& username) const;
+    std::vector<oj::common::SubmissionListItem> list_submissions_for_user(const std::string& username,std::size_t limit = 50) const;
+    std::vector<oj::common::ProblemUserStatus> list_problem_statuses_for_user(
+    const std::string& username) const;
 
 private:
     MySqlClient mysql_client_;
