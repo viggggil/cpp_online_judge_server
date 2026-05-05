@@ -1,12 +1,10 @@
 # oj_platform
 
-一个基于 **Crow** 实现的轻量级在线判题平台成品工程，包含“首页 + 题库 + 提交 + 判题 + 作业 + 排行榜 + 管理后台页面 + 多 worker 调度”的完整运行链路。
-
-## MySQL 接入说明
+一个基于 **Crow** 实现的在线判题平台交付工程，覆盖“首页 + 题库 + 提交 + 判题 + 作业 + 排行榜 + 管理后台页面 + 多 worker 调度”的完整运行链路。
 
 ## Docker Compose（完整容器化部署）
 
-当前仓库已经补充完整容器编排，可直接启动：
+项目已提供完整容器编排，可直接启动：
 
 - `mysql`
 - `redis`
@@ -113,7 +111,7 @@ docker compose up -d --build
 
 ### 与当前代码配置的关系
 
-当前 `common/platform_config.h` 已支持从环境变量读取容器内连接配置，未设置时仍保留本地开发默认值：
+`common/platform_config.h` 已支持从环境变量读取容器内连接配置，未设置时仍保留本地开发默认值：
 
 - MySQL：`127.0.0.1:3306`
 - Redis：`127.0.0.1:6379`
@@ -131,7 +129,7 @@ docker compose up -d --build
 - 在宿主机直接运行服务时，仍可继续使用默认配置
 - 在容器内运行时，会自动切换到容器网络地址
 
-当前版本已将以下数据源切换为 MySQL：
+平台将以下数据源统一存储在 MySQL 中：
 
 - 用户信息：`users`
 - 题目元数据：`problems`
@@ -198,7 +196,7 @@ cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
 
 如需修改连接参数，请调整 `common/platform_config.h` 中的 `MySqlConfig` 默认值，或通过环境变量覆盖。
 
-当前仓库已经具备完整可运行的平台能力：
+平台已具备完整可运行能力：
 
 - 使用 `Crow` 作为第三方 Web 框架
 - 拥有 `oj_server`、`judge_dispatcher` 与 `judge_worker` 三个服务目标
@@ -218,23 +216,15 @@ cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
 
 ---
 
-## 当前项目状态
+## 交付范围
 
-### 已完成
-
-- [x] 基础目录结构搭建
-- [x] Crow 作为第三方库接入
-- [x] `oj_server` 路由与静态资源服务
-- [x] 题目列表 / 题面详情 API
-- [x] 提交代码 / 查询提交结果 API
-- [x] MySQL 题库存储 + 判题流程
-- [x] 登录注册能力
-- [x] JWT 鉴权
-- [x] Web 端登录弹窗与登录态控制
-- [x] Redis 题目列表缓存接入代码
-- [x] Redis 提交队列与异步评测状态轮询
-- [x] 独立 `judge_dispatcher` 消费进程
-- [x] 慢题示例 `1005` 与 20 组测试数据
+- `oj_server` 路由、静态资源服务与鉴权能力
+- 题库、题面、提交记录与提交结果查询 API
+- MySQL 题库存储、用户存储与连接池封装
+- Redis 列表缓存、提交队列与异步评测状态流转
+- `judge_dispatcher` 多 worker 调度与主线程统一回写数据库
+- Web 端首页、题库、提交、作业、排行榜与后台管理页面
+- 管理员题目创建 / 编辑、测试数据追加、作业创建 / 编辑能力
 
 ## 目录结构
 
@@ -330,7 +320,7 @@ oj_platform/
 
 ---
 
-## 当前前端行为
+## 前端页面
 
 - 首页可匿名查看项目介绍
 - 题库页可匿名查看题目列表
@@ -368,7 +358,7 @@ cmake -S oj_platform -B oj_platform/build
 cmake --build oj_platform/build -j
 ```
 
-如果你只是复用当前已验证的构建目录，也可以使用：
+如果你希望直接复用仓库中的已验证构建目录，也可以使用：
 
 ```bash
 cmake -S /home/max85/webserver/oj_platform -B /home/max85/webserver/oj_platform/build-auth-test
@@ -425,12 +415,12 @@ redis-server --port 6379
 
 ---
 
-## 题库格式说明
+## 题库源文件格式
 
 每道题使用一个独立目录，例如：
 
 ```text
-problems/1000/
+problems/<problem_id>/
 ├─ meta.json
 ├─ statement_zh.md
 ├─ checker.cpp
@@ -447,8 +437,8 @@ problems/1000/
 
 ```json
 {
-  "id": 1000,
-  "title": "A + B Problem",
+  "id": 2000,
+  "title": "Problem Title",
   "time_limit_ms": 1000,
   "memory_limit_mb": 128,
   "tags": ["implementation", "math"]
@@ -461,18 +451,3 @@ problems/1000/
 - `tests/N.in`：输入
 - `tests/N.out`：标准输出
 - `checker.cpp`：特殊判题器预留（当前默认未真正编译使用）
-
----
-
-## 目前内置题目
-
-当前题库包含：
-
-- `1000` A + B Problem
-- `1001` 两数之和（数组版）
-- `1002` 最长不重复子串长度
-- `1003` 合并两个有序数组
-- `1004` 二叉树层序遍历（数组输入版）
-- `1005` 失落文明（困难版，异步慢题演示）
-
-> 这些题目是参考常见面试 / Hot100 类型自行整理的训练题，不直接复制第三方平台原题文本。

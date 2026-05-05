@@ -1,13 +1,13 @@
 # problems
 
-该目录用于存放题库数据。
+该目录用于存放题库源文件。
 
-当前约定：**每道题一个目录**，目录名即题号。
+目录约定为：**每道题一个目录**，目录名即题号。
 
-例如：
+示例：
 
 ```text
-problems/1000/
+problems/<problem_id>/
 ├─ meta.json
 ├─ statement_zh.md
 ├─ checker.cpp

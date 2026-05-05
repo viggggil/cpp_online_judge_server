@@ -2,7 +2,7 @@
 
 该目录放置平台中的各类服务进程。
 
-当前包含三个主要服务：
+目录包含三个主要服务：
 
 - `oj_server/`：面向用户和前端的主服务
 - `judge_dispatcher/`：从 Redis 提交队列取任务，并按 round-robin 通过 HTTP 派发到 worker
