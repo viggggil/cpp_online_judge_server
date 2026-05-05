@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <mutex>
 #include <vector>
 
 namespace oj::dispatcher {
@@ -36,6 +37,7 @@ private:
     std::vector<WorkerState> workers_;
     std::size_t next_index_{0};
     std::chrono::milliseconds cooldown_;
+    std::mutex mutex_;
 };
 
 } // namespace oj::dispatcher

@@ -154,6 +154,7 @@
     document.getElementById('auth-logout-btn').addEventListener('click', () => {
       clearSession();
       updateAuthUI();
+      window.location.reload();
     });
 
     updateAuthUI();

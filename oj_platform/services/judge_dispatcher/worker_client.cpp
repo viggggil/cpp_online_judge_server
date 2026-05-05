@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <mutex>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -168,28 +169,49 @@ oj::protocol::JudgeResponse WorkerPool::judge(const oj::protocol::JudgeRequest& 
         throw std::runtime_error("no judge workers configured");
     }
 
-    const auto now = std::chrono::steady_clock::now();
     std::ostringstream errors;
     bool first_error = true;
 
     for (std::size_t attempt = 0; attempt < workers_.size(); ++attempt) {
-        const auto index = (next_index_ + attempt) % workers_.size();
-        auto& worker = workers_[index];
-        if (worker.unavailable_until > now) {
-            continue;
+        oj::common::JudgeWorkerEndpoint endpoint;
+        std::size_t selected_index = workers_.size();
+
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            const auto now = std::chrono::steady_clock::now();
+
+            for (std::size_t offset = 0; offset < workers_.size(); ++offset) {
+                const auto index = (next_index_ + offset) % workers_.size();
+                auto& worker = workers_[index];
+                if (worker.unavailable_until > now) {
+                    continue;
+                }
+
+                endpoint = worker.endpoint;
+                selected_index = index;
+                next_index_ = (index + 1) % workers_.size();
+                break;
+            }
+        }
+
+        if (selected_index == workers_.size()) {
+            break;
         }
 
         try {
-            WorkerClient client{worker.endpoint};
-            next_index_ = (index + 1) % workers_.size();
+            WorkerClient client{endpoint};
             return client.judge(request);
         } catch (const std::exception& ex) {
-            worker.unavailable_until = std::chrono::steady_clock::now() + cooldown_;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                workers_[selected_index].unavailable_until =
+                    std::chrono::steady_clock::now() + cooldown_;
+            }
             if (!first_error) {
                 errors << "; ";
             }
             first_error = false;
-            errors << worker.endpoint.host << ':' << worker.endpoint.port << " => " << ex.what();
+            errors << endpoint.host << ':' << endpoint.port << " => " << ex.what();
         }
     }
 

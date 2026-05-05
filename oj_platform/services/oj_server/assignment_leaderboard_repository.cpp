@@ -140,7 +140,6 @@ AssignmentLeaderboardRepository::find_assignment_leaderboard(std::int64_t assign
                 "WHERE s.assignment_id = ? "
                 "  AND s.created_at >= a.start_at "
                 "  AND s.created_at <= a.end_at "
-                "  AND u.role <> 'admin' "
                 "GROUP BY s.user_id, u.username, s.problem_id")
         };
 

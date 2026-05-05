@@ -544,14 +544,14 @@ body {
 }
 
 .leaderboard-cell-score {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 800;
   line-height: 1.1;
 }
 
 .leaderboard-cell-time {
   margin-top: 6px;
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.1;
 }
