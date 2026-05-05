@@ -67,6 +67,7 @@ async function loadAssignments() {
       <p>结束时间：${formatTimestamp(assignment.end_at)}</p>
       <div class="actions compact-actions">
         <a class="button" href="/assignments/${assignment.id}">查看作业</a>
+        <a class="button auth-btn-secondary" href="/assignments/${assignment.id}/leaderboard">查看排行榜</a>
         ${currentUser?.is_admin ? `<a class="button auth-btn-secondary" href="/web/admin-assignment-edit.html?assignment_id=${assignment.id}">编辑作业</a>` : ''}
       </div>
     `;

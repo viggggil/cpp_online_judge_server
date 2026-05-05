@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>作业详情</title>
+  <title>作业排行榜</title>
   <link rel="stylesheet" href="/web/styles.css" />
 </head>
 <body>
@@ -11,8 +11,8 @@
     <header class="site-header">
       <div class="page-header-row">
         <div>
-          <h1 id="assignment-title">作业详情</h1>
-          <p>查看作业简介、起止时间和题目列表</p>
+          <h1 id="leaderboard-title">作业排行榜</h1>
+          <p>按过题数优先、总罚时次之排序</p>
         </div>
         <nav class="top-nav top-nav-primary">
           <a class="button nav-button nav-button-inactive" href="/">首页</a>
@@ -23,26 +23,21 @@
         </nav>
       </div>
     </header>
-    <a class="back-link" href="/assignments">← 返回作业列表</a>
+    <a id="back-to-assignment-link" class="back-link" href="/assignments">← 返回作业详情</a>
     <div class="card">
       <div class="page-header-row">
-        <div id="assignment-meta" class="meta">加载中...</div>
-        <button id="edit-assignment-btn" class="button auth-btn-secondary hidden" type="button">编辑作业</button>
+        <div id="leaderboard-meta" class="meta">加载中...</div>
+        <button id="reload-leaderboard-btn" class="button auth-btn-secondary" type="button">刷新排行榜</button>
       </div>
-      <div id="assignment-toolbar" class="actions compact-actions"></div>
       <section class="assignment-section">
-        <h2>作业简介</h2>
-        <div id="assignment-description" class="statement-rendered"></div>
-      </section>
-      <section class="assignment-section">
-        <h2>题目列表</h2>
-        <div id="assignment-problems" class="list"></div>
+        <h2>排行榜</h2>
+        <p id="assignment-leaderboard-summary" class="leaderboard-summary">加载中...</p>
+        <div id="assignment-leaderboard" class="leaderboard-shell"></div>
       </section>
     </div>
   </div>
   <script src="/web/auth.js"></script>
   <script src="/web/nav.js"></script>
-  <script src="/web/markdown.js"></script>
-  <script src="/web/assignment.js"></script>
+  <script src="/web/assignment-leaderboard.js"></script>
 </body>
 </html>

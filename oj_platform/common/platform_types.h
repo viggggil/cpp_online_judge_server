@@ -2,6 +2,7 @@
 
 #include "common/protocol.hpp"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,7 @@ struct SubmissionRequest {
     std::string problem_id;
     std::string language;
     std::string source_code;
+    std::optional<std::int64_t> assignment_id;
 };
 
 struct SubmissionResult {
@@ -62,6 +64,55 @@ struct SubmissionQueueTask {
     std::string problem_id;
     std::string language;
     std::string source_code;
+};
+
+struct AssignmentLeaderboardProblemColumn {
+    std::int64_t problem_id{0};
+    std::string alias;
+    std::string title;
+    int display_order{0};
+    std::int64_t accepted_user_count{0};
+    std::int64_t submission_count{0};
+};
+
+struct AssignmentLeaderboardCell {
+    std::int64_t problem_id{0};
+    std::string alias;
+
+    bool has_submission{false};
+    bool accepted{false};
+
+    // accepted=true 时显示 100；未通过但提交过显示 0；未提交可以不显示
+    int score{0};
+
+    std::string status{"NONE"};
+
+    std::int64_t time_from_start_seconds{0};
+
+    std::int64_t first_accepted_at{0};
+    std::int64_t last_submitted_at{0};
+    std::int64_t submission_count{0};
+};
+
+struct AssignmentLeaderboardEntry {
+    int rank{0};
+    std::string username;
+
+    std::int64_t solved_count{0};
+    std::int64_t score{0};
+    std::int64_t penalty_seconds{0};
+
+    std::vector<AssignmentLeaderboardCell> cells;
+};
+
+struct AssignmentLeaderboard {
+    std::int64_t assignment_id{0};
+    std::string title;
+    std::int64_t start_at{0};
+    std::int64_t end_at{0};
+
+    std::vector<AssignmentLeaderboardProblemColumn> problems;
+    std::vector<AssignmentLeaderboardEntry> entries;
 };
 
 } // namespace oj::common

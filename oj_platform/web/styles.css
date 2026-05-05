@@ -452,6 +452,130 @@ body {
   color: #dc2626;
 }
 
+.leaderboard-summary {
+  margin: 6px 0 0;
+  color: #4b5563;
+}
+
+.leaderboard-shell {
+  margin-top: 14px;
+}
+
+.leaderboard-empty {
+  padding: 16px;
+  border: 1px dashed #d1d5db;
+  border-radius: 10px;
+  color: #6b7280;
+  background: #f9fafb;
+}
+
+.leaderboard-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.leaderboard-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  border-bottom: 1px solid #e5e7eb;
+  border-right: 1px solid #eef2f7;
+  padding: 14px 12px;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.leaderboard-table th:last-child,
+.leaderboard-table td:last-child {
+  border-right: none;
+}
+
+.leaderboard-table thead th {
+  background: #f8fafc;
+  color: #4b5563;
+  font-weight: 700;
+}
+
+.leaderboard-table tbody tr:nth-child(even) {
+  background: #fcfdff;
+}
+
+.leaderboard-rank {
+  width: 72px;
+  font-weight: 700;
+}
+
+.leaderboard-user {
+  min-width: 180px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.leaderboard-score,
+.leaderboard-penalty {
+  min-width: 96px;
+}
+
+.leaderboard-problem-col {
+  min-width: 110px;
+}
+
+.leaderboard-problem-alias {
+  font-size: 20px;
+  line-height: 1.1;
+  color: #374151;
+}
+
+.leaderboard-problem-meta {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.leaderboard-cell {
+  min-width: 110px;
+}
+
+.leaderboard-cell-score {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.leaderboard-cell-time {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.leaderboard-cell-status {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6b7280;
+  white-space: normal;
+}
+
+.leaderboard-cell-accepted {
+  color: #16a34a;
+}
+
+.leaderboard-cell-failed {
+  color: #ef4444;
+}
+
+.leaderboard-cell-empty {
+  color: #9ca3af;
+  font-weight: 600;
+}
+
 .danger-button {
   background: #dc2626;
 }

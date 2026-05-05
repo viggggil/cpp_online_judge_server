@@ -34,6 +34,9 @@ public:
     std::vector<oj::common::SubmissionListItem> list_submissions_for_user(const std::string& username,std::size_t limit = 50) const;
     std::vector<oj::common::ProblemUserStatus> list_problem_statuses_for_user(
     const std::string& username) const;
+    std::vector<oj::common::ProblemUserStatus> list_problem_statuses_for_user_in_assignment(
+        const std::string& username,
+        std::int64_t assignment_id) const;
 
 private:
     MySqlClient mysql_client_;

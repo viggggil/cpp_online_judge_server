@@ -1,6 +1,7 @@
 #include "services/oj_server/routes.h"
 
 #include "common/path_utils.h"
+#include "services/oj_server/assignment_leaderboard_repository.h"
 #include "services/oj_server/assignment_repository.h"
 #include "services/oj_server/auth_service.h"
 #include "services/oj_server/judge_service.h"
@@ -39,12 +40,17 @@ std::string assignment_detail_cache_key(std::int64_t assignment_id) {
     return "oj:assignments:detail:" + std::to_string(assignment_id);
 }
 
+std::string assignment_leaderboard_cache_key(std::int64_t assignment_id) {
+    return "oj:assignments:leaderboard:" + std::to_string(assignment_id);
+}
+
 void invalidate_assignment_cache(
     const RedisClient& redis_client,
     std::int64_t assignment_id) {
     redis_client.del(kAssignmentListCacheKey);
     if (assignment_id > 0) {
         redis_client.del(assignment_detail_cache_key(assignment_id));
+        redis_client.del(assignment_leaderboard_cache_key(assignment_id));
     }
 }
 
@@ -311,6 +317,60 @@ crow::json::wvalue make_assignment_detail_json(
     return body;
 }
 
+crow::json::wvalue make_assignment_leaderboard_json(
+    const oj::common::AssignmentLeaderboard& leaderboard) {
+    crow::json::wvalue body;
+    body["assignment_id"] = leaderboard.assignment_id;
+    body["title"] = leaderboard.title;
+    body["start_at"] = leaderboard.start_at;
+    body["end_at"] = leaderboard.end_at;
+
+    crow::json::wvalue::list problems;
+    for (const auto& problem : leaderboard.problems) {
+        crow::json::wvalue item;
+        item["problem_id"] = problem.problem_id;
+        item["alias"] = problem.alias;
+        item["title"] = problem.title;
+        item["display_order"] = problem.display_order;
+        item["accepted_user_count"] = problem.accepted_user_count;
+        item["submission_count"] = problem.submission_count;
+        problems.push_back(std::move(item));
+    }
+    body["problems"] = std::move(problems);
+
+    crow::json::wvalue::list entries;
+    for (const auto& entry : leaderboard.entries) {
+        crow::json::wvalue item;
+        item["rank"] = entry.rank;
+        item["username"] = entry.username;
+        item["solved_count"] = entry.solved_count;
+        item["score"] = entry.score;
+        item["penalty_seconds"] = entry.penalty_seconds;
+
+        crow::json::wvalue::list cells;
+        for (const auto& cell : entry.cells) {
+            crow::json::wvalue cell_item;
+            cell_item["problem_id"] = cell.problem_id;
+            cell_item["alias"] = cell.alias;
+            cell_item["has_submission"] = cell.has_submission;
+            cell_item["accepted"] = cell.accepted;
+            cell_item["score"] = cell.score;
+            cell_item["status"] = cell.status;
+            cell_item["time_from_start_seconds"] = cell.time_from_start_seconds;
+            cell_item["first_accepted_at"] = cell.first_accepted_at;
+            cell_item["last_submitted_at"] = cell.last_submitted_at;
+            cell_item["submission_count"] = cell.submission_count;
+            cells.push_back(std::move(cell_item));
+        }
+
+        item["cells"] = std::move(cells);
+        entries.push_back(std::move(item));
+    }
+    body["entries"] = std::move(entries);
+
+    return body;
+}
+
 } // namespace
 
 // 统一注册静态页面、鉴权接口、题目接口、提交接口和管理员后台接口。
@@ -345,6 +405,10 @@ void register_routes(crow::Crow<>& app) {
 
     CROW_ROUTE(app, "/assignments/<int>")([](std::int64_t) {
         return serve_file(resolve_web_path(std::filesystem::path{"web"} / "assignment.html"));
+    });
+
+    CROW_ROUTE(app, "/assignments/<int>/leaderboard")([](std::int64_t) {
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "assignment-leaderboard.html"));
     });
 
     CROW_ROUTE(app, "/web/admin-assignment-create.html")([] {
@@ -407,8 +471,17 @@ void register_routes(crow::Crow<>& app) {
 
             try {
                 SubmissionRepository repository;
-                const auto statuses =
-                    repository.list_problem_statuses_for_user(user->username);
+                std::vector<oj::common::ProblemUserStatus> statuses;
+
+                const auto assignment_id_param = req.url_params.get("assignment_id");
+                if (assignment_id_param != nullptr && std::string{assignment_id_param}.size() > 0) {
+                    const auto assignment_id = std::stoll(assignment_id_param);
+                    statuses = repository.list_problem_statuses_for_user_in_assignment(
+                        user->username,
+                        assignment_id);
+                } else {
+                    statuses = repository.list_problem_statuses_for_user(user->username);
+                }
 
                 return crow::response{200, make_problem_status_list_json(statuses)};
             } catch (const std::exception& ex) {
@@ -619,6 +692,7 @@ void register_routes(crow::Crow<>& app) {
                     if (unix_now_seconds() < detail->start_at) {
                         return json_error(400, "assignment has not started");
                     }
+                    request.assignment_id = assignment_id;
                 }
             }
 
@@ -1142,6 +1216,49 @@ void register_routes(crow::Crow<>& app) {
             return json_error(400, ex.what());
         }
     });
+
+    CROW_ROUTE(app, "/api/assignments/<int>/leaderboard").methods(crow::HTTPMethod::GET)([](std::int64_t assignment_id) {
+        try {
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+
+            const auto cache_key = assignment_leaderboard_cache_key(assignment_id);
+
+            if (const auto cached = redis_client.get(cache_key); cached) {
+                crow::response resp;
+                resp.code = 200;
+                resp.set_header("Content-Type", "application/json; charset=utf-8");
+                resp.set_header("X-Cache", "HIT");
+                resp.body = *cached;
+                return resp;
+            }
+
+            AssignmentLeaderboardRepository repository;
+            const auto leaderboard = repository.find_assignment_leaderboard(assignment_id);
+
+            if (!leaderboard) {
+                return json_error(404, "assignment not found");
+            }
+
+            const auto body = make_assignment_leaderboard_json(*leaderboard);
+            const auto payload = body.dump();
+
+            redis_client.setex(
+                cache_key,
+                redis_config.assignment_leaderboard_ttl_seconds,
+                payload);
+
+            crow::response resp;
+            resp.code = 200;
+            resp.set_header("Content-Type", "application/json; charset=utf-8");
+            resp.set_header("X-Cache", "MISS");
+            resp.body = payload;
+            return resp;
+        } catch (const std::exception& ex) {
+            return json_error(400, ex.what());
+        }
+    });
+
 
 
 

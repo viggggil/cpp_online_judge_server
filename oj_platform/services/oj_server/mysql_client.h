@@ -39,6 +39,7 @@ private:
     std::string build_uri() const;
     std::filesystem::path resolve_schema_path() const;
     void initialize_schema(sql::Connection& connection) const;
+    void ensure_schema_upgrades(sql::Connection& connection) const;
     std::unique_ptr<sql::Connection> open_new_connection() const;
     void recycle_connection(std::unique_ptr<sql::Connection> connection) const;
 };

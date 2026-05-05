@@ -1,5 +1,8 @@
 #include "services/oj_server/submission_repository.h"
 
+#include "common/platform_config.h"
+#include "services/oj_server/redis_client.h"
+
 #include <cppconn/prepared_statement.h>
 #include <cppconn/resultset.h>
 
@@ -15,6 +18,23 @@ std::int64_t unix_now() {
     return std::chrono::duration_cast<std::chrono::seconds>(
                std::chrono::system_clock::now().time_since_epoch())
         .count();
+}
+
+std::string assignment_leaderboard_cache_key(std::int64_t assignment_id) {
+    return "oj:assignments:leaderboard:" + std::to_string(assignment_id);
+}
+
+bool has_assignment_id_column(sql::Connection& connection) {
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection.prepareStatement(
+            "SELECT COUNT(*) AS cnt "
+            "FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() "
+            "  AND TABLE_NAME = 'submissions' "
+            "  AND COLUMN_NAME = 'assignment_id'")
+    };
+    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+    return result->next() && result->getInt("cnt") > 0;
 }
 
 oj::protocol::JudgeStatus parse_judge_status(const std::string& text) {
@@ -117,31 +137,75 @@ void SubmissionRepository::create_submission(const std::string& submission_id,
         throw std::runtime_error("user not found for submission: " + username);
     }
 
-    auto statement = std::unique_ptr<sql::PreparedStatement>{
-        connection->prepareStatement(
-            "INSERT INTO submissions (submission_id, user_id, username_snapshot, problem_id, problem_id_text, language, source_code, status, final_status, accepted, detail, compile_success, compile_stdout, compile_stderr, total_time_used_ms, peak_memory_used_kb, system_message, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")};
     const auto now = unix_now();
-    statement->setString(1, submission_id);
-    statement->setInt64(2, *user_id);
-    statement->setString(3, username);
-    statement->setInt64(4, std::stoll(request.problem_id));
-    statement->setString(5, request.problem_id);
-    statement->setString(6, request.language);
-    statement->setString(7, request.source_code);
-    statement->setString(8, status);
-    statement->setString(9, status);
-    statement->setBoolean(10, false);
-    statement->setString(11, detail);
-    statement->setBoolean(12, false);
-    statement->setString(13, "");
-    statement->setString(14, "");
-    statement->setInt(15, 0);
-    statement->setInt(16, 0);
-    statement->setString(17, "");
-    statement->setInt64(18, now);
-    statement->setInt64(19, now);
-    statement->executeUpdate();
+    const auto with_assignment_id = has_assignment_id_column(*connection);
+
+    if (with_assignment_id) {
+        auto statement = std::unique_ptr<sql::PreparedStatement>{
+            connection->prepareStatement(
+                "INSERT INTO submissions "
+                "(submission_id, user_id, username_snapshot, problem_id, problem_id_text, assignment_id, language, source_code, status, final_status, accepted, detail, compile_success, compile_stdout, compile_stderr, total_time_used_ms, peak_memory_used_kb, system_message, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")};
+        statement->setString(1, submission_id);
+        statement->setInt64(2, *user_id);
+        statement->setString(3, username);
+        statement->setInt64(4, std::stoll(request.problem_id));
+        statement->setString(5, request.problem_id);
+
+        if (request.assignment_id) {
+            statement->setInt64(6, *request.assignment_id);
+        } else {
+            statement->setNull(6, sql::DataType::BIGINT);
+        }
+
+        statement->setString(7, request.language);
+        statement->setString(8, request.source_code);
+        statement->setString(9, status);
+        statement->setString(10, status);
+        statement->setBoolean(11, false);
+        statement->setString(12, detail);
+        statement->setBoolean(13, false);
+        statement->setString(14, "");
+        statement->setString(15, "");
+        statement->setInt(16, 0);
+        statement->setInt(17, 0);
+        statement->setString(18, "");
+        statement->setInt64(19, now);
+        statement->setInt64(20, now);
+        statement->executeUpdate();
+    } else {
+        auto statement = std::unique_ptr<sql::PreparedStatement>{
+            connection->prepareStatement(
+                "INSERT INTO submissions "
+                "(submission_id, user_id, username_snapshot, problem_id, problem_id_text, language, source_code, status, final_status, accepted, detail, compile_success, compile_stdout, compile_stderr, total_time_used_ms, peak_memory_used_kb, system_message, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")};
+        statement->setString(1, submission_id);
+        statement->setInt64(2, *user_id);
+        statement->setString(3, username);
+        statement->setInt64(4, std::stoll(request.problem_id));
+        statement->setString(5, request.problem_id);
+        statement->setString(6, request.language);
+        statement->setString(7, request.source_code);
+        statement->setString(8, status);
+        statement->setString(9, status);
+        statement->setBoolean(10, false);
+        statement->setString(11, detail);
+        statement->setBoolean(12, false);
+        statement->setString(13, "");
+        statement->setString(14, "");
+        statement->setInt(15, 0);
+        statement->setInt(16, 0);
+        statement->setString(17, "");
+        statement->setInt64(18, now);
+        statement->setInt64(19, now);
+        statement->executeUpdate();
+    }
+
+    if (request.assignment_id) {
+        const oj::common::RedisConfig redis_config{};
+        RedisClient redis_client{redis_config};
+        redis_client.del(assignment_leaderboard_cache_key(*request.assignment_id));
+    }
 }
 
 // 覆盖更新提交主状态，并重建逐点评测明细以保持数据库结果与最新判题一致。
@@ -172,6 +236,22 @@ void SubmissionRepository::update_submission(const oj::common::SubmissionResult&
     update_statement->setInt64(11, unix_now());
     update_statement->setInt64(12, *submission_db_id);
     update_statement->executeUpdate();
+
+    {
+        auto assignment_statement = std::unique_ptr<sql::PreparedStatement>{
+            connection->prepareStatement("SELECT assignment_id FROM submissions WHERE id = ?")
+        };
+        assignment_statement->setInt64(1, *submission_db_id);
+        auto assignment_result =
+            std::unique_ptr<sql::ResultSet>{assignment_statement->executeQuery()};
+        if (assignment_result->next() && !assignment_result->isNull("assignment_id")) {
+            const oj::common::RedisConfig redis_config{};
+            RedisClient redis_client{redis_config};
+            redis_client.del(
+                assignment_leaderboard_cache_key(
+                    assignment_result->getInt64("assignment_id")));
+        }
+    }
 
     auto delete_statement = std::unique_ptr<sql::PreparedStatement>{
         connection->prepareStatement("DELETE FROM submission_testcases WHERE submission_db_id = ?")};
@@ -257,26 +337,11 @@ std::vector<oj::common::SubmissionListItem> SubmissionRepository::list_submissio
     return items;
 }
 
-std::vector<oj::common::ProblemUserStatus>
-SubmissionRepository::list_problem_statuses_for_user(const std::string& username) const {
-    auto connection = mysql_client_.create_connection();
+namespace {
 
-    const auto user_id = find_user_id(*connection, username);
-    if (!user_id) {
-        return {};
-    }
-
-    auto statement = std::unique_ptr<sql::PreparedStatement>{
-        connection->prepareStatement(
-            "SELECT problem_id, final_status, accepted, created_at "
-            "FROM submissions "
-            "WHERE user_id = ? "
-            "ORDER BY problem_id ASC, created_at DESC, id DESC")
-    };
-
-    statement->setInt64(1, *user_id);
-
-    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+std::vector<oj::common::ProblemUserStatus> collect_problem_statuses(
+    sql::PreparedStatement& statement) {
+    auto result = std::unique_ptr<sql::ResultSet>{statement.executeQuery()};
 
     std::map<std::string, oj::common::ProblemUserStatus> by_problem;
 
@@ -300,6 +365,7 @@ SubmissionRepository::list_problem_statuses_for_user(const std::string& username
 
             iter = by_problem.emplace(problem_id, std::move(status)).first;
         }
+
         if (accepted) {
             iter->second.accepted = true;
             iter->second.status = "ACCEPTED";
@@ -314,6 +380,57 @@ SubmissionRepository::list_problem_statuses_for_user(const std::string& username
     }
 
     return items;
+}
+
+} // namespace
+
+std::vector<oj::common::ProblemUserStatus>
+SubmissionRepository::list_problem_statuses_for_user(const std::string& username) const {
+    auto connection = mysql_client_.create_connection();
+
+    const auto user_id = find_user_id(*connection, username);
+    if (!user_id) {
+        return {};
+    }
+
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "SELECT problem_id, final_status, accepted, created_at "
+            "FROM submissions "
+            "WHERE user_id = ? "
+            "ORDER BY problem_id ASC, created_at DESC, id DESC")
+    };
+
+    statement->setInt64(1, *user_id);
+    return collect_problem_statuses(*statement);
+}
+
+std::vector<oj::common::ProblemUserStatus>
+SubmissionRepository::list_problem_statuses_for_user_in_assignment(
+    const std::string& username,
+    std::int64_t assignment_id) const {
+    if (assignment_id <= 0) {
+        throw std::runtime_error("assignment_id must be positive");
+    }
+
+    auto connection = mysql_client_.create_connection();
+
+    const auto user_id = find_user_id(*connection, username);
+    if (!user_id) {
+        return {};
+    }
+
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "SELECT problem_id, final_status, accepted, created_at "
+            "FROM submissions "
+            "WHERE user_id = ? AND assignment_id = ? "
+            "ORDER BY problem_id ASC, created_at DESC, id DESC")
+    };
+
+    statement->setInt64(1, *user_id);
+    statement->setInt64(2, assignment_id);
+    return collect_problem_statuses(*statement);
 }
 
 

@@ -128,13 +128,26 @@ function renderProblemList(assignment, problems, statusMap) {
   });
 }
 
-async function loadProblemStatusesIfAvailable() {
+function renderLeaderboardEntryLink(assignmentId) {
+  const toolbar = document.getElementById('assignment-toolbar');
+  if (!toolbar) {
+    return;
+  }
+
+  toolbar.innerHTML = `
+    <a class="button auth-btn-secondary" href="/assignments/${encodeURIComponent(assignmentId)}/leaderboard">查看排行榜</a>
+  `;
+}
+
+async function loadProblemStatusesIfAvailable(assignmentId) {
   if (!window.ojAuth.isLoggedIn()) {
     return new Map();
   }
 
   try {
-    const response = await window.ojAuth.authFetch('/api/problems/my-status');
+    const response = await window.ojAuth.authFetch(
+      `/api/problems/my-status?assignment_id=${encodeURIComponent(assignmentId)}`
+    );
     if (!response.ok) {
       return new Map();
     }
@@ -153,7 +166,7 @@ async function loadAssignment() {
   const [response, currentUser, statusMap] = await Promise.all([
     fetch(`/api/assignments/${assignmentId}`),
     fetchCurrentUserOptional().catch(() => null),
-    loadProblemStatusesIfAvailable(),
+    loadProblemStatusesIfAvailable(assignmentId),
   ]);
   const data = await response.json();
   if (!response.ok) {
@@ -167,6 +180,7 @@ async function loadAssignment() {
     window.ojMarkdown.markdownToHtml(data.description_markdown || '');
 
   bindEditButton(assignmentId, currentUser);
+  renderLeaderboardEntryLink(assignmentId);
   renderProblemList(data, data.problems || [], statusMap);
 }
 

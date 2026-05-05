@@ -53,6 +53,7 @@ add_executable(oj_server
     services/oj_server/redis_client.cpp
     services/oj_server/problem_importer.cpp
     services/oj_server/assignment_repository.cpp
+    services/oj_server/assignment_leaderboard_repository.cpp
 )
 
 target_include_directories(oj_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MYSQLCPP_INCLUDE_DIR})

@@ -4,6 +4,8 @@
 
 #include <cppconn/driver.h>
 #include <cppconn/exception.h>
+#include <cppconn/prepared_statement.h>
+#include <cppconn/resultset.h>
 #include <cppconn/statement.h>
 #include <mysql_driver.h>
 
@@ -129,6 +131,78 @@ void MySqlClient::initialize_schema(sql::Connection& connection) const {
     });
 }
 
+void MySqlClient::ensure_schema_upgrades(sql::Connection& connection) const {
+    connection.setSchema(config_.database);
+
+    auto has_column = [&](const std::string& table_name, const std::string& column_name) {
+        auto statement = std::unique_ptr<sql::PreparedStatement>{
+            connection.prepareStatement(
+                "SELECT COUNT(*) AS cnt "
+                "FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?")
+        };
+        statement->setString(1, config_.database);
+        statement->setString(2, table_name);
+        statement->setString(3, column_name);
+        auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+        return result->next() && result->getInt("cnt") > 0;
+    };
+
+    auto has_index = [&](const std::string& table_name, const std::string& index_name) {
+        auto statement = std::unique_ptr<sql::PreparedStatement>{
+            connection.prepareStatement(
+                "SELECT COUNT(*) AS cnt "
+                "FROM information_schema.STATISTICS "
+                "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?")
+        };
+        statement->setString(1, config_.database);
+        statement->setString(2, table_name);
+        statement->setString(3, index_name);
+        auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+        return result->next() && result->getInt("cnt") > 0;
+    };
+
+    auto has_foreign_key = [&](const std::string& table_name, const std::string& constraint_name) {
+        auto statement = std::unique_ptr<sql::PreparedStatement>{
+            connection.prepareStatement(
+                "SELECT COUNT(*) AS cnt "
+                "FROM information_schema.TABLE_CONSTRAINTS "
+                "WHERE TABLE_SCHEMA = ? "
+                "  AND TABLE_NAME = ? "
+                "  AND CONSTRAINT_NAME = ? "
+                "  AND CONSTRAINT_TYPE = 'FOREIGN KEY'")
+        };
+        statement->setString(1, config_.database);
+        statement->setString(2, table_name);
+        statement->setString(3, constraint_name);
+        auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+        return result->next() && result->getInt("cnt") > 0;
+    };
+
+    auto statement = std::unique_ptr<sql::Statement>{connection.createStatement()};
+
+    if (!has_column("submissions", "assignment_id")) {
+        statement->execute(
+            "ALTER TABLE submissions "
+            "ADD COLUMN assignment_id BIGINT NULL AFTER problem_id_text");
+    }
+
+    if (!has_index("submissions", "idx_submissions_assignment_user_problem_created")) {
+        statement->execute(
+            "ALTER TABLE submissions "
+            "ADD INDEX idx_submissions_assignment_user_problem_created "
+            "(assignment_id, user_id, problem_id, created_at DESC, id DESC)");
+    }
+
+    if (!has_foreign_key("submissions", "fk_submissions_assignment")) {
+        statement->execute(
+            "ALTER TABLE submissions "
+            "ADD CONSTRAINT fk_submissions_assignment "
+            "FOREIGN KEY (assignment_id) REFERENCES assignments(id) "
+            "ON DELETE SET NULL ON UPDATE CASCADE");
+    }
+}
+
 // 建立一条新的 MySQL 连接，并完成建库、选库与会话初始化。
 std::unique_ptr<sql::Connection> MySqlClient::open_new_connection() const {
     try {
@@ -150,6 +224,7 @@ std::unique_ptr<sql::Connection> MySqlClient::open_new_connection() const {
 
         initialize_schema(*connection);
         connection->setSchema(config_.database);
+        ensure_schema_upgrades(*connection);
 
         auto statement = std::unique_ptr<sql::Statement>{connection->createStatement()};
         statement->execute("SET NAMES " + std::string{config_.charset});

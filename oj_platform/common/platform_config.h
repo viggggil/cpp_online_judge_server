@@ -41,6 +41,7 @@ struct RedisConfig {
     long long problem_list_ttl_seconds{env_int_or_default("OJ_PROBLEM_LIST_TTL_SECONDS", 60)};
     long long assignment_list_ttl_seconds{env_int_or_default("OJ_ASSIGNMENT_LIST_TTL_SECONDS", 60)};
     long long assignment_detail_ttl_seconds{env_int_or_default("OJ_ASSIGNMENT_DETAIL_TTL_SECONDS", 60)};
+    long long assignment_leaderboard_ttl_seconds{env_int_or_default("OJ_ASSIGNMENT_LEADERBOARD_TTL_SECONDS", 15)};
     const char* submission_queue_key{env_or_default("OJ_SUBMISSION_QUEUE_KEY", "oj:queue:submissions")};
 };
 
