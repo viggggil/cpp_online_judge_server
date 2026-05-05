@@ -35,8 +35,3 @@ cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
 ```
 
 迁移完成后，`oj_server` 才能正常查询该题并接受提交。
-
-当前还属于原型结构，后续可继续增强：
-- 增加管理员接口与题目录入接口
-- 增加提交列表筛选、分页和更多统计
-- 完善队列监控与 worker 状态展示

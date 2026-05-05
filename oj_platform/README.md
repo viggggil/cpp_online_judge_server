@@ -1,6 +1,6 @@
 # oj_platform
 
-一个基于 **Crow** 实现的轻量级在线判题平台原型工程，目标是逐步演进成“题库 + 提交 + 判题 + 负载均衡 worker + Web 前端”的完整 OJ 系统。
+一个基于 **Crow** 实现的轻量级在线判题平台成品工程，包含“首页 + 题库 + 提交 + 判题 + 作业 + 排行榜 + 管理后台页面 + 多 worker 调度”的完整运行链路。
 
 ## MySQL 接入说明
 
@@ -196,9 +196,9 @@ cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
 - `/api/auth/register`
 - `/api/auth/login`
 
-如需修改连接参数，请调整 `common/platform_config.h` 中的 `MySqlConfig` 默认值，或后续再扩展为环境变量/配置文件。
+如需修改连接参数，请调整 `common/platform_config.h` 中的 `MySqlConfig` 默认值，或通过环境变量覆盖。
 
-当前仓库已经不是只有目录骨架，而是具备了一个可以运行和演示的最小版本：
+当前仓库已经具备完整可运行的平台能力：
 
 - 使用 `Crow` 作为第三方 Web 框架
 - 拥有 `oj_server`、`judge_dispatcher` 与 `judge_worker` 三个服务目标
@@ -211,9 +211,10 @@ cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
 - 提交结果页支持测试点折叠详情查看（默认只展示状态、耗时、内存）
 - 支持 Redis 提交队列、异步评测状态流转与轮询展示
 - 支持 dispatcher 通过 HTTP 调用多个 judge_worker，并按轮询顺序分发任务
+- 支持主线程调度 + 后台 future 等待 worker 返回 + 主线程统一回写数据库
 - MySQL 访问已封装为连接池
 
-> 说明：当前版本已把“提交入口”和“判题消费”拆成异步队列模型：`oj_server` 负责入队，`judge_dispatcher` 负责消费 Redis 队列，并通过 HTTP 调用 compose 中配置的 3 个 `judge_worker`。dispatcher 维护 worker 列表下标，成功派发后递增，下次从下一个 worker 开始，实现 round-robin；worker 失败时会短暂冷却并尝试下一个可用 worker。
+> 说明：当前版本已把“提交入口”和“判题消费”拆成异步队列模型：`oj_server` 负责入队，`judge_dispatcher` 负责消费 Redis 队列，并通过 HTTP 调用 compose 中配置的 3 个 `judge_worker`。dispatcher 维护 worker 列表下标，成功派发后递增，下次从下一个 worker 开始，实现 round-robin；worker 失败时会短暂冷却并尝试下一个可用 worker。worker 阻塞等待发生在后台 future 中，主线程持续调度并在 future 完成后统一更新数据库。
 
 ---
 
@@ -235,17 +236,6 @@ cd /home/max85/webserver/oj_platform && ./build-mysql-check/problem_migrator
 - [x] 独立 `judge_dispatcher` 消费进程
 - [x] 慢题示例 `1005` 与 20 组测试数据
 
-### 当前仍属于原型 / 待增强
-
-- [x] 远程 `judge_worker` HTTP 调度与 round-robin 分发
-- [ ] 多语言支持（当前主要按 C++17 路径组织）
-- [ ] 沙箱隔离进一步增强
-- [x] 数据库存储用户/提交/题目元数据
-- [ ] 管理后台、题目录入后台、队列监控面板
-- [ ] 更完整的单元测试与集成测试
-
----
-
 ## 目录结构
 
 ```text
@@ -261,11 +251,11 @@ oj_platform/
 ├─ problems/                # 题库数据（每题一个目录）
 ├─ web/                     # 前端静态页面与 JS/CSS
 ├─ runtime/                 # 运行时数据：日志、临时文件、沙箱目录等
-├─ tests/                   # 测试代码目录（预留）
+├─ tests/                   # 测试代码目录
 └─ README.md
 ```
 
-各子目录下还补充了独立 `README.md`，方便单独阅读职责说明。
+各子目录下均包含独立 `README.md`，方便单独阅读职责说明。
 
 ---
 
@@ -275,20 +265,30 @@ oj_platform/
 
 #### 页面路由
 
-- `GET /`：题目列表页
+- `GET /`：首页
+- `GET /problems`：题库页
 - `GET /problems/<id>`：题目详情页
 - `GET /submit/<id>`：提交页
+- `GET /submissions`：提交记录页
 - `GET /submissions/<id>`：提交结果页
+- `GET /assignments`：作业列表页
+- `GET /assignments/<id>`：作业详情页
+- `GET /assignments/<id>/leaderboard`：作业排行榜页
 - `GET /web/<path>`：静态资源
 
 #### 公共 API
 
 - `GET /api/health`
 - `GET /api/problems`
+- `GET /api/problems/my-status`
+- `GET /api/assignments`
+- `GET /api/assignments/<id>`
+- `GET /api/assignments/<id>/leaderboard`
 
 #### 鉴权 API
 
 - `POST /api/auth/register`
+- `POST /api/auth/admin/register`
 - `POST /api/auth/login`
 - `GET /api/auth/me`
 
@@ -296,7 +296,23 @@ oj_platform/
 
 - `GET /api/problems/<id>`
 - `POST /api/submissions`（异步入队，返回 `202 Accepted`）
+- `GET /api/submissions`
 - `GET /api/submissions/<submission_id>`
+
+#### 管理员 API
+
+- `GET /api/admin/problems/<id>/statement`
+- `PUT /api/admin/problems/<id>/statement`
+- `PUT /api/admin/problems/<id>/id`
+- `DELETE /api/admin/problems/<id>`
+- `PUT /api/admin/problems/<id>/title`
+- `PUT /api/admin/problems/<id>/limits`
+- `POST /api/admin/problems/import`
+- `POST /api/admin/problems/<id>/testcases/file`
+- `POST /api/admin/problems`
+- `POST /api/admin/assignments`
+- `PATCH /api/admin/assignments/<id>`
+- `POST /api/admin/assignments/<id>/problems`
 
 ### `judge_worker`
 
@@ -309,16 +325,21 @@ oj_platform/
 - 通过 HTTP 调用 `judge_worker` 完成编译与测试点执行
 - 支持从 `OJ_JUDGE_WORKERS` 或 `OJ_JUDGE_WORKER_1..3` 读取多个 worker，当前 compose 配置 3 个 worker
 - 使用 round-robin 顺序派发；若某个 worker 失败，会进入短暂冷却并尝试下一个可用 worker
+- worker 请求在后台 future 中等待返回，主线程持续调度后续任务
 - 将状态更新为最终态，如 `OK / WRONG_ANSWER / TLE / SYSTEM_ERROR`
 
 ---
 
 ## 当前前端行为
 
-- 首页可匿名查看题目列表
+- 首页可匿名查看项目介绍
+- 题库页可匿名查看题目列表
 - 点击“查看题面 / 提交代码”时，如果未登录，会弹出登录 / 注册框
 - 登录成功后可访问题面、提交代码并查看结果
 - 提交后结果页会自动轮询，展示 `QUEUED -> RUNNING -> FINAL_STATUS` 的变化
+- 普通用户可查看作业列表、作业详情、作业排行榜与个人作业题目状态
+- 管理员可创建题目、编辑题面、编辑题号/标题/时空限制、追加测试数据文件
+- 管理员可创建作业、编辑作业、调整起止时间、补充作业题目
 - 页面右上角显示当前登录用户并支持退出登录
 
 ---
@@ -455,25 +476,3 @@ problems/1000/
 - `1005` 失落文明（困难版，异步慢题演示）
 
 > 这些题目是参考常见面试 / Hot100 类型自行整理的训练题，不直接复制第三方平台原题文本。
-
----
-
-## 下一步建议
-
-1. 增加 worker 注册、心跳、负载上报与自动摘除/恢复
-2. 在 round-robin 基础上补充最少连接、按负载等调度策略
-3. 接入管理员后台、题目录入后台与队列监控面板
-4. 增加更多题目与更完整的特殊判题支持
-5. 强化判题沙箱隔离与多语言运行时
-
----
-
-## 说明
-
-如果你后面希望继续往“负载均衡在线判题系统”方向推进，我建议下一阶段优先做：
-
-1. worker 注册与心跳
-2. 负载监控与调度策略扩展（最少连接 / 按负载）
-3. 管理后台与题目录入工具
-4. 更完整的特殊判题与多语言支持
-5. 判题沙箱隔离强化

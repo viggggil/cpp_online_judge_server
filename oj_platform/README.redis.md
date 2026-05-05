@@ -1,6 +1,6 @@
 # Redis 依赖安装
 
-Ubuntu 24.04 的 apt 仓库通常只有 `libhiredis-dev`，没有 `libredis++-dev`，因此建议这样安装：
+Ubuntu 24.04 的 apt 仓库通常只有 `libhiredis-dev`，没有 `libredis++-dev`，可按下面步骤安装：
 
 ```bash
 sudo apt-get update
