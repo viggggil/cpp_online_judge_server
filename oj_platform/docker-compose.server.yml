@@ -4,10 +4,10 @@ services:
     container_name: oj_platform_mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: root123456
       MYSQL_DATABASE: oj_platform
       MYSQL_USER: oj
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_PASSWORD: oj123456
       TZ: Asia/Shanghai
     command:
       - --character-set-server=utf8mb4
@@ -16,7 +16,7 @@ services:
       - mysql_data:/var/lib/mysql
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD} --silent"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -proot123456 --silent"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -34,24 +34,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
-  minio:
-    image: minio/minio:latest
-    container_name: oj_minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
 
   oj_server:
-    build:
-      context: ..
-      dockerfile: oj_platform/Dockerfile
-      target: oj_server
+    image: cpp_oj_server:prod
     container_name: oj_platform_oj_server
     restart: unless-stopped
     depends_on:
@@ -59,31 +44,22 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_started
     environment:
       TZ: Asia/Shanghai
       OJ_SERVER_PORT: 18080
       OJ_MYSQL_HOST: mysql
       OJ_MYSQL_PORT: 3306
       OJ_MYSQL_USER: oj
-      OJ_MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      OJ_MYSQL_PASSWORD: oj123456
       OJ_MYSQL_DATABASE: oj_platform
       OJ_REDIS_HOST: redis
       OJ_REDIS_PORT: 6379
-      OJ_ADMIN_REGISTER_CODE: ${OJ_ADMIN_REGISTER_CODE}
-      OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
-      OJ_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
-      OJ_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      OJ_OBJECT_STORAGE_BUCKET: oj-testdata
+      OJ_ADMIN_REGISTER_CODE: ${OJ_ADMIN_REGISTER_CODE:-admin123456}
     ports:
       - "8080:18080"
 
   judge_dispatcher:
-    build:
-      context: ..
-      dockerfile: oj_platform/Dockerfile
-      target: judge_dispatcher
+    image: cpp_oj_judge_dispatcher:prod
     container_name: oj_platform_judge_dispatcher
     restart: unless-stopped
     depends_on:
@@ -91,8 +67,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_started
       judge_worker_1:
         condition: service_started
       judge_worker_2:
@@ -104,64 +78,38 @@ services:
       OJ_MYSQL_HOST: mysql
       OJ_MYSQL_PORT: 3306
       OJ_MYSQL_USER: oj
-      OJ_MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      OJ_MYSQL_PASSWORD: oj123456
       OJ_MYSQL_DATABASE: oj_platform
       OJ_REDIS_HOST: redis
       OJ_REDIS_PORT: 6379
       OJ_JUDGE_WORKER_1: judge_worker_1:18081/api/judge
       OJ_JUDGE_WORKER_2: judge_worker_2:18081/api/judge
       OJ_JUDGE_WORKER_3: judge_worker_3:18081/api/judge
-      OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
-      OJ_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
-      OJ_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      OJ_OBJECT_STORAGE_BUCKET: oj-testdata
 
   judge_worker_1:
-    build:
-      context: ..
-      dockerfile: oj_platform/Dockerfile
-      target: judge_worker
+    image: cpp_oj_judge_worker:prod
     container_name: oj_platform_judge_worker_1
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
       OJ_JUDGE_WORKER_PORT: 18081
-      OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
-      OJ_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
-      OJ_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      OJ_OBJECT_STORAGE_BUCKET: oj-testdata
 
   judge_worker_2:
-    build:
-      context: ..
-      dockerfile: oj_platform/Dockerfile
-      target: judge_worker
+    image: cpp_oj_judge_worker:prod
     container_name: oj_platform_judge_worker_2
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
       OJ_JUDGE_WORKER_PORT: 18081
-      OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
-      OJ_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
-      OJ_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      OJ_OBJECT_STORAGE_BUCKET: oj-testdata
 
   judge_worker_3:
-    build:
-      context: ..
-      dockerfile: oj_platform/Dockerfile
-      target: judge_worker
+    image: cpp_oj_judge_worker:prod
     container_name: oj_platform_judge_worker_3
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
       OJ_JUDGE_WORKER_PORT: 18081
-      OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
-      OJ_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
-      OJ_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      OJ_OBJECT_STORAGE_BUCKET: oj-testdata
 
 volumes:
   mysql_data:
   redis_data:
-  minio_data:

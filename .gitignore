@@ -22,3 +22,6 @@ CMakeFiles/
 *.swp
 *.swo
 .DS_Store
+
+*.tar
+oj_images_*.tar

@@ -1,7 +1,19 @@
 const HOME_INTRO_MARKDOWN = `
-# OJ Platform
+# C++ 在线判题平台
 
-一个基于 **Crow** 实现的轻量级在线判题平台原型工程，目标是逐步演进成完整的在线判题系统，覆盖题库、提交、判题调度、分布式 worker 与 Web 前端。
+**C++17 / Crow / MySQL / Redis / Linux**
+
+设计并实现在线判题平台后端，将提交服务、任务调度和判题执行拆分为 \`oj_server\`、\`judge_dispatcher\`、\`judge_worker\` 三类进程，降低提交请求与耗时判题任务之间的耦合。
+
+基于 Redis List 构建异步任务队列，dispatcher 阻塞消费提交任务，将状态从 \`QUEUED\` 更新为 \`RUNNING\`，并在 worker 返回后统一回写最终判题状态。
+
+实现 dispatcher 到多个 judge worker 的 HTTP 调度，支持 round-robin 派发、worker 异常冷却和失败重试，提高判题节点扩展能力。
+
+实现判题 worker 的编译与运行模块，使用 \`fork\` / \`exec\` / \`waitpid\` 管理子进程，使用 \`dup2\` 完成输入输出重定向，使用 \`setrlimit\` 限制 CPU、内存、文件大小、进程数和文件描述符。
+
+设计 MySQL 表结构存储题目、测试点、提交记录、测试点明细和作业数据，并针对用户提交记录、题目提交记录等查询路径建立索引。
+
+使用 Docker Compose 编排 MySQL、Redis、主服务、dispatcher 和多个 worker，实现服务化部署和完整判题链路演示。
 
 ## 当前项目能力
 
@@ -12,26 +24,6 @@ const HOME_INTRO_MARKDOWN = `
 - 支持 Redis 题目列表缓存与提交异步队列
 - 支持独立的 \`judge_dispatcher\` 与多个 \`judge_worker\` 轮询分发任务
 - 支持管理员创建题目、编辑题面、维护题目编号、名称及时空限制
-
-## 运行拓扑
-
-\`\`\`
-Browser -> oj_server -> Redis queue -> judge_dispatcher -> judge_worker
-                     \\
-                      -> MySQL
-\`\`\`
-
-## 使用方式
-
-- 在“题库”页浏览题目并进入题面
-- 在“作业”页查看课程作业与对应题目列表
-- 在“提交”页查看历史提交记录
-- 管理员可在“创建”页导入题目包、手动创建题目，或创建作业
-- 新建空题目的测试数据可以后续在编辑页追加
-
-## 项目定位
-
-当前版本已经不是单纯的目录骨架，而是一个可以运行和演示的最小 OJ 原型，适合继续扩展判题能力、管理后台和前端体验。
 `;
 
 async function initHomePage() {
