@@ -160,6 +160,28 @@ services:
       OJ_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
       OJ_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       OJ_OBJECT_STORAGE_BUCKET: oj-testdata
+  go_monitor:
+    build:
+      context: ./services/go_monitor
+      dockerfile: Dockerfile
+    container_name: oj_platform_go_monitor
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      GO_MONITOR_PORT: 18090
+      OJ_JUDGE_WORKER_HEALTH_1: http://judge_worker_1:18081/api/health
+      OJ_JUDGE_WORKER_HEALTH_2: http://judge_worker_2:18081/api/health
+      OJ_JUDGE_WORKER_HEALTH_3: http://judge_worker_3:18081/api/health
+    ports:
+      - "18090:18090"
+    depends_on:
+      judge_worker_1:
+        condition: service_started
+      judge_worker_2:
+        condition: service_started
+      judge_worker_3:
+        condition: service_started
+
 
 volumes:
   mysql_data:
