@@ -2,7 +2,6 @@ package main
 
 import (
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
@@ -15,14 +14,6 @@ type WorkerStatus struct {
 	Alive  bool   `json:"alive"`
 	Status string `json:"status"`
 	Error  string `json:"error,omitempty"`
-}
-
-func getenv(key string, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	return value
 }
 
 func checkWorker(name string, url string) WorkerStatus {
@@ -59,40 +50,40 @@ func checkWorker(name string, url string) WorkerStatus {
 	}
 }
 
-func workersHandler(c *gin.Context) {
-	workers := map[string]string{
-		"judge_worker_1": getenv("OJ_JUDGE_WORKER_HEALTH_1", "http://judge_worker_1:18081/api/health"),
-		"judge_worker_2": getenv("OJ_JUDGE_WORKER_HEALTH_2", "http://judge_worker_2:18081/api/health"),
-		"judge_worker_3": getenv("OJ_JUDGE_WORKER_HEALTH_3", "http://judge_worker_3:18081/api/health"),
+func workersHandler(cfg Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		workers := cfg.WorkerHealthURLs
+
+		results := make([]WorkerStatus, 0, len(workers))
+		resultChan := make(chan WorkerStatus, len(workers))
+
+		var wg sync.WaitGroup
+
+		for name, url := range workers {
+			wg.Add(1)
+
+			go func(name string, url string) {
+				defer wg.Done()
+				resultChan <- checkWorker(name, url)
+			}(name, url)
+		}
+
+		wg.Wait()
+		close(resultChan)
+
+		for result := range resultChan {
+			results = append(results, result)
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"workers": results,
+		})
 	}
-
-	results := make([]WorkerStatus, 0, len(workers))
-	resultChan := make(chan WorkerStatus, len(workers))
-
-	var wg sync.WaitGroup
-
-	for name, url := range workers {
-		wg.Add(1)
-
-		go func(name string, url string) {
-			defer wg.Done()
-			resultChan <- checkWorker(name, url)
-		}(name, url)
-	}
-
-	wg.Wait()
-	close(resultChan)
-
-	for result := range resultChan {
-		results = append(results, result)
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"workers": results,
-	})
 }
 
 func main() {
+	cfg := LoadConfig()
+
 	r := gin.Default()
 
 	api := r.Group("/api/monitor")
@@ -104,9 +95,8 @@ func main() {
 			})
 		})
 
-		api.GET("/workers", workersHandler)
+		api.GET("/workers", workersHandler(cfg))
 	}
 
-	port := getenv("GO_MONITOR_PORT", "18090")
-	r.Run(":" + port)
+	r.Run(":" + cfg.Port)
 }
