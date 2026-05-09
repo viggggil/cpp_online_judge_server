@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>监控</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="site-header">
+      <div class="page-header-row">
+        <div>
+          <h1>监控</h1>
+          <div id="monitor-subtitle" class="meta">加载中...</div>
+        </div>
+        <nav class="top-nav top-nav-primary">
+          <a class="button nav-button nav-button-inactive" href="/">首页</a>
+          <a class="button nav-button nav-button-inactive" href="/problems">题库</a>
+          <a class="button nav-button nav-button-inactive" href="/assignments">作业</a>
+          <a class="button nav-button nav-button-inactive nav-submissions" href="/submissions">提交</a>
+          <a class="button nav-button nav-button-inactive nav-create" href="/web/admin-problem-create.html">创建</a>
+          <a class="button nav-button nav-button-active nav-monitor" href="/monitor">监控</a>
+        </nav>
+      </div>
+    </header>
+    <div class="card">
+      <div id="monitor-permission-notice" class="notice hidden"></div>
+
+      <div class="admin-tools-grid">
+        <section class="list-item admin-tool-card">
+          <h2>筛选条件</h2>
+          <label class="label" for="monitor-problem-id-input">题号筛选</label>
+          <input id="monitor-problem-id-input" class="input" type="text" placeholder="可选，例如 1000" />
+          <label class="label" for="monitor-limit-input">显示条数</label>
+          <input id="monitor-limit-input" class="input" type="number" min="1" max="100" value="20" />
+          <div class="actions compact-actions">
+            <button id="monitor-search-btn" class="button" type="button">查询</button>
+            <button id="monitor-reset-btn" class="button auth-btn-secondary" type="button">重置</button>
+          </div>
+        </section>
+      </div>
+
+      <pre id="monitor-status-message" class="notice status-message"></pre>
+      <div id="monitor-submission-list" class="list"></div>
+    </div>
+  </div>
+  <script src="/web/auth.js"></script>
+  <script src="/web/nav.js"></script>
+  <script src="/web/monitor.js"></script>
+</body>
+</html>

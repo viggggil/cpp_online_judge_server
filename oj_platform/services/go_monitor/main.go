@@ -84,6 +84,14 @@ func workersHandler(cfg Config) gin.HandlerFunc {
 func main() {
 	cfg := LoadConfig()
 
+	initRedisClient()
+	defer redisClient.Close()
+
+	if err := initMySQLClient(); err != nil {
+		panic(err)
+	}
+	defer mysqlDB.Close()
+
 	r := gin.Default()
 
 	api := r.Group("/api/monitor")
@@ -96,6 +104,8 @@ func main() {
 		})
 
 		api.GET("/workers", workersHandler(cfg))
+		api.GET("/queue", queueHandler)
+		api.GET("/submissions", submissionsHandler)
 	}
 
 	r.Run(":" + cfg.Port)

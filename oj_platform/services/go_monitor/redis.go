@@ -99,17 +99,15 @@ func parseRedisQueueItem(raw string) RedisQueueItem {
 		Status: "in_queue",
 		Raw:    raw,
 	}
-
 	var data map[string]interface{}
-	if err := json.Unmarshal([]byte(raw), &data); err != nil {
+	err := json.Unmarshal([]byte(raw), &data)
+	if err != nil {
 		return item
 	}
-
-	item.SubmissionID = getInt64FromMap(data, "submission_id", "submissionId", "id")
+	item.SubmissionID = getInt64FromMap(data, "submission_id", "submissionID")
 	item.ProblemID = getInt64FromMap(data, "problem_id", "problemId")
 	item.UserID = getInt64FromMap(data, "user_id", "userId")
 	item.Language = getStringFromMap(data, "language", "lang")
-
 	return item
 }
 
@@ -146,7 +144,7 @@ func queueHandler(c *gin.Context) {
 	status, err := getRedisQueueStatus(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to read redis queue",
+			"error":  "failed to read redis queue",
 			"detail": err.Error(),
 		})
 		return

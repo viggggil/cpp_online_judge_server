@@ -36,6 +36,19 @@
     }
   }
 
+  async function handleMonitorNavigation(event) {
+    if (!window.ojAuth.requireLogin('进入监控页前请先登录')) {
+      event.preventDefault();
+      return;
+    }
+
+    const currentUser = await fetchCurrentUserOptional();
+    if (!currentUser?.is_admin) {
+      event.preventDefault();
+      alert('权限不足，需要管理员权限才能进入监控页面');
+    }
+  }
+
   function bindProtectedNavigation() {
     document.querySelectorAll('.nav-submissions').forEach((element) => {
       element.addEventListener('click', (event) => {
@@ -45,6 +58,10 @@
 
     document.querySelectorAll('.nav-create').forEach((element) => {
       element.addEventListener('click', handleCreateNavigation);
+    });
+
+    document.querySelectorAll('.nav-monitor').forEach((element) => {
+      element.addEventListener('click', handleMonitorNavigation);
     });
   }
 

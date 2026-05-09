@@ -161,36 +161,41 @@ services:
       OJ_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       OJ_OBJECT_STORAGE_BUCKET: oj-testdata
   go_monitor:
-  build:
-    context: ./services/go_monitor
-    dockerfile: Dockerfile
-  container_name: oj_platform_go_monitor
-  restart: unless-stopped
-  environment:
-    TZ: Asia/Shanghai
-    GO_MONITOR_PORT: 18090
-
-    OJ_REDIS_HOST: redis
-    OJ_REDIS_PORT: 6379
-    OJ_REDIS_PASSWORD: ""
-    OJ_REDIS_DB: 0
-    OJ_REDIS_QUEUE: oj:queue:submissions
-    OJ_REDIS_QUEUE_SAMPLE_LIMIT: 50
-
-    OJ_JUDGE_WORKER_HEALTH_1: http://judge_worker_1:18081/api/health
-    OJ_JUDGE_WORKER_HEALTH_2: http://judge_worker_2:18081/api/health
-    OJ_JUDGE_WORKER_HEALTH_3: http://judge_worker_3:18081/api/health
-  ports:
-    - "18090:18090"
-  depends_on:
-    redis:
-      condition: service_healthy
-    judge_worker_1:
-      condition: service_started
-    judge_worker_2:
-      condition: service_started
-    judge_worker_3:
-      condition: service_started
+    build:
+      context: ./services/go_monitor
+      dockerfile: Dockerfile
+    container_name: oj_platform_go_monitor
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      GO_MONITOR_PORT: 18090
+      OJ_MYSQL_HOST: mysql
+      OJ_MYSQL_PORT: 3306
+      OJ_MYSQL_USER: oj
+      OJ_MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      OJ_MYSQL_DATABASE: oj_platform
+      OJ_REDIS_HOST: redis
+      OJ_REDIS_PORT: 6379
+      OJ_REDIS_PASSWORD: ""
+      OJ_REDIS_DB: 0
+      OJ_REDIS_QUEUE: oj:queue:submissions
+      OJ_REDIS_QUEUE_SAMPLE_LIMIT: 50
+      OJ_JUDGE_WORKER_HEALTH_1: http://judge_worker_1:18081/api/health
+      OJ_JUDGE_WORKER_HEALTH_2: http://judge_worker_2:18081/api/health
+      OJ_JUDGE_WORKER_HEALTH_3: http://judge_worker_3:18081/api/health
+    ports:
+      - "18090:18090"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      judge_worker_1:
+        condition: service_started
+      judge_worker_2:
+        condition: service_started
+      judge_worker_3:
+        condition: service_started
 
 
 

@@ -231,6 +231,35 @@ crow::json::wvalue make_submission_list_json(const std::vector<oj::common::Submi
     return body;
 }
 
+crow::json::wvalue make_admin_submission_list_json(
+    const std::vector<oj::common::AdminSubmissionListItem>& submissions,
+    int limit,
+    const std::string& problem_id) {
+    crow::json::wvalue::list items;
+    for (const auto& submission : submissions) {
+        crow::json::wvalue item;
+        item["submission_id"] = submission.submission_id;
+        item["username"] = submission.username;
+        item["problem_id"] = submission.problem_id;
+        item["language"] = submission.language;
+        item["status"] = submission.status;
+        item["final_status"] = submission.final_status;
+        item["accepted"] = submission.accepted;
+        item["detail"] = submission.detail;
+        item["created_at"] = submission.created_at;
+        item["total_time_used_ms"] = submission.total_time_used_ms;
+        item["peak_memory_used_kb"] = submission.peak_memory_used_kb;
+        items.push_back(std::move(item));
+    }
+
+    crow::json::wvalue body;
+    body["items"] = std::move(items);
+    body["limit"] = limit;
+    body["problem_id"] = problem_id;
+    body["total_shown"] = static_cast<int>(submissions.size());
+    return body;
+}
+
 // 生成题目列表接口 JSON，并与 Redis 缓存结构保持一致。
 crow::json::wvalue make_problem_list_json(const std::vector<oj::common::ProblemSummary>& problems) {
     crow::json::wvalue::list items;
@@ -409,6 +438,10 @@ void register_routes(crow::Crow<>& app) {
 
     CROW_ROUTE(app, "/assignments/<int>/leaderboard")([](std::int64_t) {
         return serve_file(resolve_web_path(std::filesystem::path{"web"} / "assignment-leaderboard.html"));
+    });
+
+    CROW_ROUTE(app, "/monitor")([] {
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "monitor.html"));
     });
 
     CROW_ROUTE(app, "/web/admin-assignment-create.html")([] {
@@ -727,6 +760,43 @@ void register_routes(crow::Crow<>& app) {
         }
         return crow::response{200, make_submission_json(*result)};
     });
+
+    CROW_ROUTE(app, "/api/admin/monitor/submissions")
+        .methods(crow::HTTPMethod::GET)([](const crow::request& req) {
+            const auto admin = require_admin(req);
+            if (!admin) {
+                return json_error(403, "admin only");
+            }
+
+            try {
+                int limit = 20;
+                if (const auto limit_param = req.url_params.get("limit");
+                    limit_param != nullptr) {
+                    limit = std::stoi(limit_param);
+                }
+                if (limit <= 0) {
+                    limit = 20;
+                }
+                if (limit > 100) {
+                    limit = 100;
+                }
+
+                std::string problem_id;
+                if (const auto problem_id_param = req.url_params.get("problem_id");
+                    problem_id_param != nullptr) {
+                    problem_id = problem_id_param;
+                }
+
+                SubmissionRepository repository;
+                const auto submissions =
+                    repository.list_recent_submissions(limit, problem_id);
+                return crow::response{
+                    200,
+                    make_admin_submission_list_json(submissions, limit, problem_id)};
+            } catch (const std::exception& ex) {
+                return json_error(400, ex.what());
+            }
+        });
 
     CROW_ROUTE(app, "/api/admin/problems/<int>/statement").methods(crow::HTTPMethod::GET)([](const crow::request& req, std::int64_t problem_id) {
         const auto admin = require_admin(req);

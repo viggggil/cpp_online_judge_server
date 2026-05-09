@@ -17,6 +17,7 @@
 - `admin-problem-edit.html/js`：管理员编辑题目页
 - `admin-assignment-create.html/js`：管理员创建作业页
 - `admin-assignment-edit.html/js`：管理员编辑作业页
+- `monitor.html/js`：管理员监控页
 - `auth.js`：登录/注册弹窗与登录态管理
 - `nav.js`：导航与受保护跳转逻辑
 - `markdown.js`：Markdown 渲染辅助
