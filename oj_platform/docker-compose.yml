@@ -61,6 +61,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      go_monitor:
+        condition: service_started
     environment:
       TZ: Asia/Shanghai
       OJ_SERVER_PORT: 18080
@@ -72,6 +74,8 @@ services:
       OJ_REDIS_HOST: redis
       OJ_REDIS_PORT: 6379
       OJ_ADMIN_REGISTER_CODE: ${OJ_ADMIN_REGISTER_CODE}
+      OJ_MONITOR_HOST: go_monitor
+      OJ_MONITOR_PORT: 18090
       OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
       OJ_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
       OJ_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}

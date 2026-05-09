@@ -12,13 +12,22 @@
 
 #include <crow.h>
 
+#include <cerrno>
+#include <cctype>
 #include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <memory>
+#include <netdb.h>
 #include <optional>
 #include <sstream>
+#include <string_view>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <cppconn/prepared_statement.h>
 #include <cppconn/resultset.h>
@@ -231,35 +240,6 @@ crow::json::wvalue make_submission_list_json(const std::vector<oj::common::Submi
     return body;
 }
 
-crow::json::wvalue make_admin_submission_list_json(
-    const std::vector<oj::common::AdminSubmissionListItem>& submissions,
-    int limit,
-    const std::string& problem_id) {
-    crow::json::wvalue::list items;
-    for (const auto& submission : submissions) {
-        crow::json::wvalue item;
-        item["submission_id"] = submission.submission_id;
-        item["username"] = submission.username;
-        item["problem_id"] = submission.problem_id;
-        item["language"] = submission.language;
-        item["status"] = submission.status;
-        item["final_status"] = submission.final_status;
-        item["accepted"] = submission.accepted;
-        item["detail"] = submission.detail;
-        item["created_at"] = submission.created_at;
-        item["total_time_used_ms"] = submission.total_time_used_ms;
-        item["peak_memory_used_kb"] = submission.peak_memory_used_kb;
-        items.push_back(std::move(item));
-    }
-
-    crow::json::wvalue body;
-    body["items"] = std::move(items);
-    body["limit"] = limit;
-    body["problem_id"] = problem_id;
-    body["total_shown"] = static_cast<int>(submissions.size());
-    return body;
-}
-
 // 生成题目列表接口 JSON，并与 Redis 缓存结构保持一致。
 crow::json::wvalue make_problem_list_json(const std::vector<oj::common::ProblemSummary>& problems) {
     crow::json::wvalue::list items;
@@ -398,6 +378,155 @@ crow::json::wvalue make_assignment_leaderboard_json(
     body["entries"] = std::move(entries);
 
     return body;
+}
+
+class SocketHandle {
+public:
+    explicit SocketHandle(int fd) : fd_(fd) {}
+    ~SocketHandle() {
+        if (fd_ >= 0) {
+            ::close(fd_);
+        }
+    }
+
+    SocketHandle(const SocketHandle&) = delete;
+    SocketHandle& operator=(const SocketHandle&) = delete;
+
+    int get() const { return fd_; }
+
+private:
+    int fd_{-1};
+};
+
+struct HttpResponse {
+    int status_code{0};
+    std::string body;
+};
+
+int connect_to_monitor_service(const oj::common::MonitorServiceConfig& config) {
+    ::addrinfo hints{};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    ::addrinfo* result = nullptr;
+    const auto port_text = std::to_string(config.port);
+    const int rc = ::getaddrinfo(config.host, port_text.c_str(), &hints, &result);
+    if (rc != 0) {
+        throw std::runtime_error(std::string{"getaddrinfo failed: "} + ::gai_strerror(rc));
+    }
+
+    int sockfd = -1;
+    for (auto* rp = result; rp != nullptr; rp = rp->ai_next) {
+        sockfd = ::socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (sockfd < 0) {
+            continue;
+        }
+
+        ::timeval connect_timeout{};
+        connect_timeout.tv_sec = config.connect_timeout_ms / 1000;
+        connect_timeout.tv_usec = (config.connect_timeout_ms % 1000) * 1000;
+        ::setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &connect_timeout, sizeof(connect_timeout));
+
+        ::timeval read_timeout{};
+        read_timeout.tv_sec = config.read_timeout_ms / 1000;
+        read_timeout.tv_usec = (config.read_timeout_ms % 1000) * 1000;
+        ::setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof(read_timeout));
+
+        if (::connect(sockfd, rp->ai_addr, rp->ai_addrlen) == 0) {
+            ::freeaddrinfo(result);
+            return sockfd;
+        }
+
+        ::close(sockfd);
+        sockfd = -1;
+    }
+
+    ::freeaddrinfo(result);
+    throw std::runtime_error(std::string{"failed to connect monitor service: "} + std::strerror(errno));
+}
+
+void write_all(int fd, std::string_view data) {
+    std::size_t sent = 0;
+    while (sent < data.size()) {
+        const auto n = ::send(fd, data.data() + sent, data.size() - sent, 0);
+        if (n <= 0) {
+            throw std::runtime_error(std::string{"send failed: "} + std::strerror(errno));
+        }
+        sent += static_cast<std::size_t>(n);
+    }
+}
+
+std::string read_all(int fd) {
+    std::string response;
+    char buffer[4096];
+    while (true) {
+        const auto n = ::recv(fd, buffer, sizeof(buffer), 0);
+        if (n == 0) {
+            break;
+        }
+        if (n < 0) {
+            throw std::runtime_error(std::string{"recv failed: "} + std::strerror(errno));
+        }
+        response.append(buffer, static_cast<std::size_t>(n));
+    }
+    return response;
+}
+
+std::string url_encode(std::string_view value) {
+    std::ostringstream encoded;
+    encoded.fill('0');
+    encoded << std::hex << std::uppercase;
+
+    for (const unsigned char ch : value) {
+        if (std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.' || ch == '~') {
+            encoded << static_cast<char>(ch);
+        } else {
+            encoded << '%' << std::setw(2) << static_cast<int>(ch);
+        }
+    }
+
+    return encoded.str();
+}
+
+HttpResponse extract_http_response(const std::string& raw_response) {
+    const auto header_end = raw_response.find("\r\n\r\n");
+    if (header_end == std::string::npos) {
+        throw std::runtime_error("invalid http response from monitor service");
+    }
+
+    const auto status_line_end = raw_response.find("\r\n");
+    if (status_line_end == std::string::npos) {
+        throw std::runtime_error("invalid http status line from monitor service");
+    }
+
+    const auto status_line = raw_response.substr(0, status_line_end);
+    std::istringstream status_stream(status_line);
+    std::string http_version;
+    int status_code = 0;
+    status_stream >> http_version >> status_code;
+    if (status_code <= 0) {
+        throw std::runtime_error("failed to parse monitor service status code");
+    }
+
+    return HttpResponse{status_code, raw_response.substr(header_end + 4)};
+}
+
+HttpResponse fetch_monitor_submissions(int limit, const std::string& problem_id) {
+    const oj::common::MonitorServiceConfig config{};
+
+    std::string path = std::string{config.submissions_api_path} +
+                       "?limit=" + std::to_string(limit);
+    if (!problem_id.empty()) {
+        path += "&problem_id=" + url_encode(problem_id);
+    }
+
+    const auto http_request = std::string{"GET "} + path + " HTTP/1.1\r\n" +
+                              "Host: " + config.host + ":" + std::to_string(config.port) + "\r\n" +
+                              "Connection: close\r\n\r\n";
+
+    SocketHandle socket_handle{connect_to_monitor_service(config)};
+    write_all(socket_handle.get(), http_request);
+    return extract_http_response(read_all(socket_handle.get()));
 }
 
 } // namespace
@@ -787,14 +916,16 @@ void register_routes(crow::Crow<>& app) {
                     problem_id = problem_id_param;
                 }
 
-                SubmissionRepository repository;
-                const auto submissions =
-                    repository.list_recent_submissions(limit, problem_id);
-                return crow::response{
-                    200,
-                    make_admin_submission_list_json(submissions, limit, problem_id)};
+                const auto monitor_response =
+                    fetch_monitor_submissions(limit, problem_id);
+
+                crow::response resp;
+                resp.code = monitor_response.status_code;
+                resp.set_header("Content-Type", "application/json; charset=utf-8");
+                resp.body = monitor_response.body;
+                return resp;
             } catch (const std::exception& ex) {
-                return json_error(400, ex.what());
+                return json_error(502, ex.what());
             }
         });
 
