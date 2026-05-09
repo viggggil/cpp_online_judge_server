@@ -472,6 +472,13 @@ std::string read_all(int fd) {
     return response;
 }
 
+std::string to_lower_copy(std::string text) {
+    for (char& ch : text) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return text;
+}
+
 std::string url_encode(std::string_view value) {
     std::ostringstream encoded;
     encoded.fill('0');
@@ -486,6 +493,48 @@ std::string url_encode(std::string_view value) {
     }
 
     return encoded.str();
+}
+
+std::string decode_chunked_body(const std::string& body) {
+    std::string decoded;
+    std::size_t cursor = 0;
+
+    while (cursor < body.size()) {
+        const auto line_end = body.find("\r\n", cursor);
+        if (line_end == std::string::npos) {
+            throw std::runtime_error("invalid chunked response from monitor service");
+        }
+
+        const auto size_text = body.substr(cursor, line_end - cursor);
+        const auto semicolon = size_text.find(';');
+        const auto hex_size = size_text.substr(0, semicolon);
+
+        std::size_t chunk_size = 0;
+        try {
+            chunk_size = static_cast<std::size_t>(std::stoull(hex_size, nullptr, 16));
+        } catch (...) {
+            throw std::runtime_error("failed to parse chunk size from monitor service");
+        }
+
+        cursor = line_end + 2;
+        if (chunk_size == 0) {
+            break;
+        }
+
+        if (cursor + chunk_size > body.size()) {
+            throw std::runtime_error("truncated chunked response from monitor service");
+        }
+
+        decoded.append(body, cursor, chunk_size);
+        cursor += chunk_size;
+
+        if (cursor + 2 > body.size() || body.substr(cursor, 2) != "\r\n") {
+            throw std::runtime_error("invalid chunk separator from monitor service");
+        }
+        cursor += 2;
+    }
+
+    return decoded;
 }
 
 HttpResponse extract_http_response(const std::string& raw_response) {
@@ -508,7 +557,15 @@ HttpResponse extract_http_response(const std::string& raw_response) {
         throw std::runtime_error("failed to parse monitor service status code");
     }
 
-    return HttpResponse{status_code, raw_response.substr(header_end + 4)};
+    const auto headers = raw_response.substr(status_line_end + 2, header_end - (status_line_end + 2));
+    const auto headers_lower = to_lower_copy(headers);
+    const auto body = raw_response.substr(header_end + 4);
+
+    if (headers_lower.find("transfer-encoding: chunked") != std::string::npos) {
+        return HttpResponse{status_code, decode_chunked_body(body)};
+    }
+
+    return HttpResponse{status_code, body};
 }
 
 HttpResponse fetch_monitor_submissions(int limit, const std::string& problem_id) {
@@ -520,6 +577,19 @@ HttpResponse fetch_monitor_submissions(int limit, const std::string& problem_id)
         path += "&problem_id=" + url_encode(problem_id);
     }
 
+    const auto http_request = std::string{"GET "} + path + " HTTP/1.1\r\n" +
+                              "Host: " + config.host + ":" + std::to_string(config.port) + "\r\n" +
+                              "Connection: close\r\n\r\n";
+
+    SocketHandle socket_handle{connect_to_monitor_service(config)};
+    write_all(socket_handle.get(), http_request);
+    return extract_http_response(read_all(socket_handle.get()));
+}
+
+HttpResponse fetch_monitor_summary() {
+    const oj::common::MonitorServiceConfig config{};
+
+    const auto path = std::string{config.summary_api_path};
     const auto http_request = std::string{"GET "} + path + " HTTP/1.1\r\n" +
                               "Host: " + config.host + ":" + std::to_string(config.port) + "\r\n" +
                               "Connection: close\r\n\r\n";
@@ -890,8 +960,7 @@ void register_routes(crow::Crow<>& app) {
         return crow::response{200, make_submission_json(*result)};
     });
 
-    CROW_ROUTE(app, "/api/admin/monitor/submissions")
-        .methods(crow::HTTPMethod::GET)([](const crow::request& req) {
+    CROW_ROUTE(app, "/api/admin/monitor/submissions").methods(crow::HTTPMethod::GET)([](const crow::request& req) {
             const auto admin = require_admin(req);
             if (!admin) {
                 return json_error(403, "admin only");
@@ -909,15 +978,32 @@ void register_routes(crow::Crow<>& app) {
                 if (limit > 100) {
                     limit = 100;
                 }
-
                 std::string problem_id;
                 if (const auto problem_id_param = req.url_params.get("problem_id");
                     problem_id_param != nullptr) {
                     problem_id = problem_id_param;
                 }
-
                 const auto monitor_response =
                     fetch_monitor_submissions(limit, problem_id);
+
+                crow::response resp;
+                resp.code = monitor_response.status_code;
+                resp.set_header("Content-Type", "application/json; charset=utf-8");
+                resp.body = monitor_response.body;
+                return resp;
+            } catch (const std::exception& ex) {
+                return json_error(502, ex.what());
+            }
+        });
+
+    CROW_ROUTE(app, "/api/admin/monitor/summary").methods(crow::HTTPMethod::GET)([](const crow::request& req) {
+            const auto admin = require_admin(req);
+            if (!admin) {
+                return json_error(403, "admin only");
+            }
+
+            try {
+                const auto monitor_response = fetch_monitor_summary();
 
                 crow::response resp;
                 resp.code = monitor_response.status_code;

@@ -6,6 +6,7 @@ type Config struct {
 	Port string
 
 	WorkerHealthURLs map[string]string
+	MinIOHealthURL   string
 
 	MySQLHost     string
 	MySQLPort     string
@@ -36,6 +37,7 @@ func LoadConfig() Config {
 			"judge_worker_2": getenv("OJ_JUDGE_WORKER_HEALTH_2", "http://judge_worker_2:18081/api/health"),
 			"judge_worker_3": getenv("OJ_JUDGE_WORKER_HEALTH_3", "http://judge_worker_3:18081/api/health"),
 		},
+		MinIOHealthURL: getenv("OJ_MINIO_HEALTH_URL", "http://minio:9000/minio/health/live"),
 
 		MySQLHost:     getenv("OJ_MYSQL_HOST", "mysql"),
 		MySQLPort:     getenv("OJ_MYSQL_PORT", "3306"),

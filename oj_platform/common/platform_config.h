@@ -66,6 +66,8 @@ struct JudgeWorkerEndpoint {
 struct MonitorServiceConfig {
     const char* host{env_or_default("OJ_MONITOR_HOST", "127.0.0.1")};
     int port{env_int_or_default("OJ_MONITOR_PORT", 18090)};
+    const char* summary_api_path{
+        env_or_default("OJ_MONITOR_SUMMARY_API_PATH", "/api/monitor/summary")};
     const char* submissions_api_path{
         env_or_default("OJ_MONITOR_SUBMISSIONS_API_PATH", "/api/monitor/submissions")};
     int connect_timeout_ms{env_int_or_default("OJ_MONITOR_CONNECT_TIMEOUT_MS", 3000)};

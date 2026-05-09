@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -88,9 +89,11 @@ func main() {
 	defer redisClient.Close()
 
 	if err := initMySQLClient(); err != nil {
-		panic(err)
+		log.Printf("mysql initialization deferred: %v", err)
 	}
-	defer mysqlDB.Close()
+	if mysqlDB != nil {
+		defer mysqlDB.Close()
+	}
 
 	r := gin.Default()
 
@@ -104,6 +107,7 @@ func main() {
 		})
 
 		api.GET("/workers", workersHandler(cfg))
+		api.GET("/summary", summaryHandler(cfg))
 		api.GET("/queue", queueHandler)
 		api.GET("/submissions", submissionsHandler)
 	}

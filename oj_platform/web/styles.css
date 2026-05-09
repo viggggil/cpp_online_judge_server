@@ -518,6 +518,127 @@ body {
   font-weight: 600;
 }
 
+.monitor-section {
+  margin-top: 18px;
+}
+
+.monitor-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.monitor-section-header h2 {
+  margin: 0;
+}
+
+.monitor-summary-meta {
+  margin: 0;
+  color: #4b5563;
+}
+
+.monitor-summary-empty {
+  border: 1px dashed #d1d5db;
+  border-radius: 10px;
+  padding: 16px;
+  color: #6b7280;
+  background: #f9fafb;
+}
+
+.monitor-overview-grid,
+.monitor-status-grid,
+.monitor-workers-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.monitor-overview-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-bottom: 14px;
+}
+
+.monitor-status-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.monitor-workers-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-top: 14px;
+}
+
+.monitor-overview-card,
+.monitor-status-card,
+.monitor-worker-card {
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  padding: 16px;
+  background: #f8fbff;
+}
+
+.monitor-overview-card.is-ok,
+.monitor-status-card.is-ok,
+.monitor-worker-card.is-ok {
+  border-color: #a7f3d0;
+  background: #f0fdf4;
+}
+
+.monitor-overview-card.is-degraded,
+.monitor-status-card.is-degraded {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.monitor-overview-card.is-down,
+.monitor-status-card.is-down,
+.monitor-worker-card.is-down {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.monitor-status-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.monitor-status-card-header h3,
+.monitor-overview-card h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.monitor-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e0ecff;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.monitor-overview-value {
+  margin: 10px 0 6px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.monitor-status-card-meta,
+.monitor-status-card-detail {
+  margin: 6px 0 0;
+  color: #4b5563;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
 .leaderboard-score,
 .leaderboard-penalty {
   min-width: 96px;

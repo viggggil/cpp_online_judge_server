@@ -27,6 +27,16 @@
     <div class="card">
       <div id="monitor-permission-notice" class="notice hidden"></div>
 
+      <section class="monitor-section">
+        <div class="monitor-section-header">
+          <h2>系统状态</h2>
+          <p id="monitor-summary-meta" class="monitor-summary-meta">等待加载</p>
+        </div>
+        <div id="monitor-summary-panel" class="monitor-summary-panel">
+          <div class="monitor-summary-empty">登录为管理员后可查看服务与 worker 状态。</div>
+        </div>
+      </section>
+
       <div class="admin-tools-grid">
         <section class="list-item admin-tool-card">
           <h2>筛选条件</h2>
@@ -41,6 +51,11 @@
         </section>
       </div>
 
+      <section class="monitor-section">
+        <div class="monitor-section-header">
+          <h2>最近提交</h2>
+        </div>
+      </section>
       <pre id="monitor-status-message" class="notice status-message"></pre>
       <div id="monitor-submission-list" class="list"></div>
     </div>

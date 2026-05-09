@@ -184,6 +184,7 @@ services:
       OJ_REDIS_DB: 0
       OJ_REDIS_QUEUE: oj:queue:submissions
       OJ_REDIS_QUEUE_SAMPLE_LIMIT: 50
+      OJ_MINIO_HEALTH_URL: http://minio:9000/minio/health/live
       OJ_JUDGE_WORKER_HEALTH_1: http://judge_worker_1:18081/api/health
       OJ_JUDGE_WORKER_HEALTH_2: http://judge_worker_2:18081/api/health
       OJ_JUDGE_WORKER_HEALTH_3: http://judge_worker_3:18081/api/health
