@@ -94,9 +94,7 @@ func main() {
 	if mysqlDB != nil {
 		defer mysqlDB.Close()
 	}
-
 	r := gin.Default()
-
 	api := r.Group("/api/monitor")
 	{
 		api.GET("/health", func(c *gin.Context) {
