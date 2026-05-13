@@ -61,7 +61,7 @@ add_executable(oj_server
     services/oj_server/problem_importer.cpp
     services/oj_server/assignment_repository.cpp
     services/oj_server/assignment_leaderboard_repository.cpp
-    services/oj_server/rabbitmq_client.cpp
+    common/rabbitmq_client.cpp
 
 )
 
@@ -84,7 +84,7 @@ add_executable(judge_dispatcher
     services/oj_server/submission_repository.cpp
     services/oj_server/mysql_client.cpp
     services/oj_server/redis_client.cpp
-    services/oj_server/rabbitmq_client.cpp
+    common/rabbitmq_client.cpp
 )
 
 target_include_directories(judge_dispatcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MYSQLCPP_INCLUDE_DIR} ${RABBITMQ_INCLUDE_DIR})

@@ -1,8 +1,8 @@
 #include "services/oj_server/judge_service.h"
 
 #include "common/judge_task.h"
+#include "common/rabbitmq_client.h"
 #include "services/oj_server/problem_repository.h"
-#include "services/oj_server/rabbitmq_client.h"
 #include "services/oj_server/submission_repository.h"
 
 #include <chrono>

@@ -1,4 +1,4 @@
-#include "services/oj_server/rabbitmq_client.h"
+#include "common/rabbitmq_client.h"
 
 #include <amqp.h>
 #include <amqp_framing.h>
