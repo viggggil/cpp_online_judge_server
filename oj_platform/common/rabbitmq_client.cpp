@@ -53,6 +53,54 @@ bool is_timeout_reply(const amqp_rpc_reply_t& reply) {
            reply.library_error == AMQP_STATUS_TIMEOUT;
 }
 
+bool publish_message(amqp_connection_state_t connection,
+                     amqp_channel_t channel_id,
+                     const char* exchange,
+                     const char* routing_key,
+                     const std::string& body) {
+    amqp_basic_properties_t properties{};
+    properties._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG;
+    properties.content_type = amqp_cstring_bytes("application/json");
+    properties.delivery_mode = 2;
+
+    const int rc = amqp_basic_publish(
+        connection,
+        channel_id,
+        to_amqp_bytes(exchange),
+        to_amqp_bytes(routing_key),
+        0,
+        0,
+        &properties,
+        amqp_bytes_t{body.size(), const_cast<char*>(body.data())});
+
+    return rc == AMQP_STATUS_OK;
+}
+
+amqp_table_t make_retry_queue_arguments(const RabbitMqConfig& config) {
+    static constexpr int kRetryArgumentCount = 3;
+    auto* entries = new amqp_table_entry_t[kRetryArgumentCount];
+
+    entries[0].key = amqp_cstring_bytes("x-message-ttl");
+    entries[0].value.kind = AMQP_FIELD_KIND_I32;
+    entries[0].value.value.i32 = config.retry_delay_ms;
+
+    entries[1].key = amqp_cstring_bytes("x-dead-letter-exchange");
+    entries[1].value.kind = AMQP_FIELD_KIND_UTF8;
+    entries[1].value.value.bytes = amqp_cstring_bytes(config.judge_exchange);
+
+    entries[2].key = amqp_cstring_bytes("x-dead-letter-routing-key");
+    entries[2].value.kind = AMQP_FIELD_KIND_UTF8;
+    entries[2].value.value.bytes = amqp_cstring_bytes(config.judge_routing_key);
+
+    return amqp_table_t{kRetryArgumentCount, entries};
+}
+
+void destroy_table_arguments(amqp_table_t& table) {
+    delete[] table.entries;
+    table.entries = nullptr;
+    table.num_entries = 0;
+}
+
 } // namespace
 
 struct RabbitMqClient::Impl {
@@ -151,43 +199,99 @@ void RabbitMqClient::declare_topology() {
         return;
     }
 
-    amqp_exchange_declare(
-        impl_->connection,
-        impl_->channel_id,
-        to_amqp_bytes(impl_->config.judge_exchange),
-        amqp_cstring_bytes("direct"),
-        0,
-        1,
-        0,
-        0,
-        amqp_empty_table);
-    throw_on_rpc_error(
-        amqp_get_rpc_reply(impl_->connection),
-        "rabbitmq declare exchange");
+    auto retry_queue_arguments = make_retry_queue_arguments(impl_->config);
+    try {
+        amqp_exchange_declare(
+            impl_->connection,
+            impl_->channel_id,
+            to_amqp_bytes(impl_->config.judge_exchange),
+            amqp_cstring_bytes("direct"),
+            0,
+            1,
+            0,
+            0,
+            amqp_empty_table);
+        throw_on_rpc_error(
+            amqp_get_rpc_reply(impl_->connection),
+            "rabbitmq declare exchange");
 
-    amqp_queue_declare(
-        impl_->connection,
-        impl_->channel_id,
-        to_amqp_bytes(impl_->config.judge_queue),
-        0,
-        1,
-        0,
-        0,
-        amqp_empty_table);
-    throw_on_rpc_error(
-        amqp_get_rpc_reply(impl_->connection),
-        "rabbitmq declare queue");
+        amqp_queue_declare(
+            impl_->connection,
+            impl_->channel_id,
+            to_amqp_bytes(impl_->config.judge_queue),
+            0,
+            1,
+            0,
+            0,
+            amqp_empty_table);
+        throw_on_rpc_error(
+            amqp_get_rpc_reply(impl_->connection),
+            "rabbitmq declare queue");
 
-    amqp_queue_bind(
-        impl_->connection,
-        impl_->channel_id,
-        to_amqp_bytes(impl_->config.judge_queue),
-        to_amqp_bytes(impl_->config.judge_exchange),
-        to_amqp_bytes(impl_->config.judge_routing_key),
-        amqp_empty_table);
-    throw_on_rpc_error(
-        amqp_get_rpc_reply(impl_->connection),
-        "rabbitmq bind queue");
+        amqp_queue_declare(
+            impl_->connection,
+            impl_->channel_id,
+            to_amqp_bytes(impl_->config.judge_retry_queue),
+            0,
+            1,
+            0,
+            0,
+            retry_queue_arguments);
+        throw_on_rpc_error(
+            amqp_get_rpc_reply(impl_->connection),
+            "rabbitmq declare retry queue");
+
+        amqp_queue_declare(
+            impl_->connection,
+            impl_->channel_id,
+            to_amqp_bytes(impl_->config.judge_dead_letter_queue),
+            0,
+            1,
+            0,
+            0,
+            amqp_empty_table);
+        throw_on_rpc_error(
+            amqp_get_rpc_reply(impl_->connection),
+            "rabbitmq declare dead-letter queue");
+
+        amqp_queue_bind(
+            impl_->connection,
+            impl_->channel_id,
+            to_amqp_bytes(impl_->config.judge_queue),
+            to_amqp_bytes(impl_->config.judge_exchange),
+            to_amqp_bytes(impl_->config.judge_routing_key),
+            amqp_empty_table);
+        throw_on_rpc_error(
+            amqp_get_rpc_reply(impl_->connection),
+            "rabbitmq bind queue");
+
+        amqp_queue_bind(
+            impl_->connection,
+            impl_->channel_id,
+            to_amqp_bytes(impl_->config.judge_retry_queue),
+            to_amqp_bytes(impl_->config.judge_exchange),
+            to_amqp_bytes(impl_->config.judge_retry_routing_key),
+            amqp_empty_table);
+        throw_on_rpc_error(
+            amqp_get_rpc_reply(impl_->connection),
+            "rabbitmq bind retry queue");
+
+        amqp_queue_bind(
+            impl_->connection,
+            impl_->channel_id,
+            to_amqp_bytes(impl_->config.judge_dead_letter_queue),
+            to_amqp_bytes(impl_->config.judge_exchange),
+            to_amqp_bytes(impl_->config.judge_dead_letter_routing_key),
+            amqp_empty_table);
+        throw_on_rpc_error(
+            amqp_get_rpc_reply(impl_->connection),
+            "rabbitmq bind dead-letter queue");
+    } catch (...) {
+        destroy_table_arguments(retry_queue_arguments);
+        throw;
+    }
+
+    destroy_table_arguments(retry_queue_arguments);
 }
 
 bool RabbitMqClient::publish_judge_task(const std::string& body) {
@@ -195,22 +299,38 @@ bool RabbitMqClient::publish_judge_task(const std::string& body) {
         return false;
     }
 
-    amqp_basic_properties_t properties{};
-    properties._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG;
-    properties.content_type = amqp_cstring_bytes("application/json");
-    properties.delivery_mode = 2;
-
-    const int rc = amqp_basic_publish(
+    return publish_message(
         impl_->connection,
         impl_->channel_id,
-        to_amqp_bytes(impl_->config.judge_exchange),
-        to_amqp_bytes(impl_->config.judge_routing_key),
-        0,
-        0,
-        &properties,
-        amqp_bytes_t{body.size(), const_cast<char*>(body.data())});
+        impl_->config.judge_exchange,
+        impl_->config.judge_routing_key,
+        body);
+}
 
-    return rc == AMQP_STATUS_OK;
+bool RabbitMqClient::publish_retry_task(const std::string& body) {
+    if (!available()) {
+        return false;
+    }
+
+    return publish_message(
+        impl_->connection,
+        impl_->channel_id,
+        impl_->config.judge_exchange,
+        impl_->config.judge_retry_routing_key,
+        body);
+}
+
+bool RabbitMqClient::publish_dead_letter_task(const std::string& body) {
+    if (!available()) {
+        return false;
+    }
+
+    return publish_message(
+        impl_->connection,
+        impl_->channel_id,
+        impl_->config.judge_exchange,
+        impl_->config.judge_dead_letter_routing_key,
+        body);
 }
 
 std::optional<RabbitMqDelivery> RabbitMqClient::consume_one(int timeout_ms) {

@@ -11,6 +11,7 @@
 namespace oj::dispatcher {
 
 std::string build_worker_failure_detail(const std::string& reason);
+bool is_transient_worker_failure(const std::string& reason);
 void mark_submission_system_error(oj::common::SubmissionResult& record,
                                   const std::string& system_message);
 

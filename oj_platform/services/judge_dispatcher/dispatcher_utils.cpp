@@ -35,6 +35,16 @@ std::string build_worker_failure_detail(const std::string& reason) {
     return "worker unreachable: " + reason;
 }
 
+bool is_transient_worker_failure(const std::string& reason) {
+    return reason.find("timed out") != std::string::npos ||
+           reason.find("timeout") != std::string::npos ||
+           reason.find("failed to connect judge_worker") != std::string::npos ||
+           reason.find("all judge workers are temporarily unavailable") != std::string::npos ||
+           reason.find("all judge workers failed") != std::string::npos ||
+           reason.find("send failed") != std::string::npos ||
+           reason.find("recv failed") != std::string::npos;
+}
+
 void mark_submission_system_error(oj::common::SubmissionResult& record,
                                   const std::string& system_message) {
     record.judge_response.final_status = oj::protocol::JudgeStatus::system_error;

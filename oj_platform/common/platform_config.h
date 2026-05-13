@@ -60,12 +60,36 @@ struct RabbitMqConfig {
         env_or_default("OJ_RABBITMQ_JUDGE_QUEUE", "oj.judge.q")
     };
 
+    const char* judge_retry_queue{
+        env_or_default("OJ_RABBITMQ_JUDGE_RETRY_QUEUE", "oj.judge.retry.q")
+    };
+
+    const char* judge_dead_letter_queue{
+        env_or_default("OJ_RABBITMQ_JUDGE_DEAD_QUEUE", "oj.judge.dead.q")
+    };
+
     const char* judge_routing_key{
         env_or_default("OJ_RABBITMQ_JUDGE_ROUTING_KEY", "judge.submit")
     };
 
+    const char* judge_retry_routing_key{
+        env_or_default("OJ_RABBITMQ_JUDGE_RETRY_ROUTING_KEY", "judge.retry")
+    };
+
+    const char* judge_dead_letter_routing_key{
+        env_or_default("OJ_RABBITMQ_JUDGE_DEAD_ROUTING_KEY", "judge.dead")
+    };
+
     int prefetch_count{
         env_int_or_default("OJ_RABBITMQ_PREFETCH", 8)
+    };
+
+    int max_retry_count{
+        env_int_or_default("OJ_RABBITMQ_MAX_RETRY_COUNT", 3)
+    };
+
+    int retry_delay_ms{
+        env_int_or_default("OJ_RABBITMQ_RETRY_DELAY_MS", 3000)
     };
 };
 

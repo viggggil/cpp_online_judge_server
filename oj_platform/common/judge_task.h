@@ -52,6 +52,9 @@ inline JudgeTask judge_task_from_json(const std::string& payload) {
     if (task.submission_id.empty() || task.problem_id.empty()) {
         throw std::runtime_error("judge task missing submission_id or problem_id");
     }
+    if (task.retry_count < 0) {
+        throw std::runtime_error("judge task retry_count cannot be negative");
+    }
 
     return task;
 }

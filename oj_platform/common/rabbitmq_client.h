@@ -27,6 +27,8 @@ public:
     void declare_topology();
 
     bool publish_judge_task(const std::string& body);
+    bool publish_retry_task(const std::string& body);
+    bool publish_dead_letter_task(const std::string& body);
 
     std::optional<RabbitMqDelivery> consume_one(int timeout_ms);
 
