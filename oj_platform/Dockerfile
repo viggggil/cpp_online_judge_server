@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libhiredis-dev \
     libasio-dev \
     libmysqlcppconn-dev \
+    librabbitmq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcrypt1 \
     libhiredis1.1.0 \
     libmysqlcppconn7t64 \
+    librabbitmq4 \
     g++ \
     && curl -L https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc \
     && chmod +x /usr/local/bin/mc \
@@ -56,6 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcrypt1 \
     libhiredis1.1.0 \
     libmysqlcppconn7t64 \
+    librabbitmq4 \
     g++ \
     curl \
     unzip \

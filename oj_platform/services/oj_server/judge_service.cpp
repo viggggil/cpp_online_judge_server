@@ -1,10 +1,9 @@
 #include "services/oj_server/judge_service.h"
 
+#include "common/judge_task.h"
 #include "services/oj_server/problem_repository.h"
-#include "services/oj_server/redis_client.h"
+#include "services/oj_server/rabbitmq_client.h"
 #include "services/oj_server/submission_repository.h"
-
-#include <crow/json.h>
 
 #include <chrono>
 #include <optional>
@@ -63,7 +62,7 @@ std::string build_submission_detail(const std::string& status) {
 
 } // namespace
 
-// 创建提交记录、校验题目存在性并把判题任务投递到 Redis 队列中等待调度。
+// 创建提交记录、校验题目存在性并把判题任务投递到 RabbitMQ 等待调度。
 oj::common::SubmissionResult JudgeService::submit(const std::string& username,
                                                   const oj::common::SubmissionRequest& request) const {
     const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -96,20 +95,26 @@ oj::common::SubmissionResult JudgeService::submit(const std::string& username,
         submission_repository.create_submission(result.submission_id, username, request,
                                                 result.status, result.detail);
 
-        crow::json::wvalue task_json;
-        task_json["submission_id"] = result.submission_id;
-        task_json["problem_id"] = request.problem_id;
-        task_json["language"] = request.language;
-        task_json["source_code"] = request.source_code;
+        oj::common::JudgeTask task;
+        task.submission_id = result.submission_id;
+        task.problem_id = request.problem_id;
+        task.language = request.language;
+        task.trace_id = result.submission_id;
+        task.retry_count = 0;
 
-        const oj::common::RedisConfig redis_config{};
-        RedisClient redis_client{redis_config};
-        if (!redis_client.available()) {
-            throw std::runtime_error("redis is unavailable, cannot enqueue submission");
+        const oj::common::RabbitMqConfig rabbit_config{};
+        oj::common::RabbitMqClient rabbitmq{rabbit_config};
+
+        if (!rabbitmq.available()) {
+            throw std::runtime_error(
+                "rabbitmq is unavailable, cannot enqueue submission: " +
+                rabbitmq.last_error());
         }
-        if (!redis_client.rpush(redis_config.submission_queue_key, task_json.dump())) {
-            throw std::runtime_error("failed to push submission into redis queue");
+
+        if (!rabbitmq.publish_judge_task(oj::common::to_json_string(task))) {
+            throw std::runtime_error("failed to publish submission into rabbitmq");
         }
+
     } catch (const std::exception& ex) {
         result.status = "SYSTEM_ERROR";
         result.detail = ex.what();

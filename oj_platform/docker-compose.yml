@@ -34,6 +34,23 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: oj_platform_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: oj
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-oj_pass}
+      RABBITMQ_DEFAULT_VHOST: /
+      TZ: Asia/Shanghai
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
   minio:
     image: minio/minio:latest
     container_name: oj_minio
@@ -59,6 +76,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
       minio:
         condition: service_started
       go_monitor:
@@ -73,6 +92,14 @@ services:
       OJ_MYSQL_DATABASE: oj_platform
       OJ_REDIS_HOST: redis
       OJ_REDIS_PORT: 6379
+      OJ_RABBITMQ_HOST: rabbitmq
+      OJ_RABBITMQ_PORT: 5672
+      OJ_RABBITMQ_USER: oj
+      OJ_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-oj_pass}
+      OJ_RABBITMQ_VHOST: /
+      OJ_RABBITMQ_JUDGE_EXCHANGE: oj.judge.exchange
+      OJ_RABBITMQ_JUDGE_QUEUE: oj.judge.q
+      OJ_RABBITMQ_JUDGE_ROUTING_KEY: judge.submit
       OJ_ADMIN_REGISTER_CODE: ${OJ_ADMIN_REGISTER_CODE}
       OJ_MONITOR_HOST: go_monitor
       OJ_MONITOR_PORT: 18090
@@ -95,6 +122,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
       minio:
         condition: service_started
       judge_worker_1:
@@ -112,6 +141,15 @@ services:
       OJ_MYSQL_DATABASE: oj_platform
       OJ_REDIS_HOST: redis
       OJ_REDIS_PORT: 6379
+      OJ_RABBITMQ_HOST: rabbitmq
+      OJ_RABBITMQ_PORT: 5672
+      OJ_RABBITMQ_USER: oj
+      OJ_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-oj_pass}
+      OJ_RABBITMQ_VHOST: /
+      OJ_RABBITMQ_JUDGE_EXCHANGE: oj.judge.exchange
+      OJ_RABBITMQ_JUDGE_QUEUE: oj.judge.q
+      OJ_RABBITMQ_JUDGE_ROUTING_KEY: judge.submit
+      OJ_RABBITMQ_PREFETCH: 8
       OJ_JUDGE_WORKER_1: judge_worker_1:18081/api/judge
       OJ_JUDGE_WORKER_2: judge_worker_2:18081/api/judge
       OJ_JUDGE_WORKER_3: judge_worker_3:18081/api/judge

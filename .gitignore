@@ -25,3 +25,4 @@ CMakeFiles/
 
 *.tar
 oj_images_*.tar
+oj_platform/services/go_monitor/go_monitor

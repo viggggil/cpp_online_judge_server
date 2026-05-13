@@ -1,12 +1,11 @@
 #include "common/platform_config.h"
+#include "common/judge_task.h"
 #include "common/platform_types.h"
 #include "services/judge_dispatcher/dispatcher_utils.h"
 #include "services/judge_dispatcher/worker_client.h"
 #include "services/oj_server/problem_repository.h"
-#include "services/oj_server/redis_client.h"
+#include "services/oj_server/rabbitmq_client.h"
 #include "services/oj_server/submission_repository.h"
-
-#include <crow/json.h>
 
 #include <chrono>
 #include <csignal>
@@ -27,8 +26,10 @@ volatile std::sig_atomic_t g_running = 1;
 
 struct PendingJudgeTask {
     std::string submission_id;
+    std::uint64_t delivery_tag{};
     std::future<oj::common::SubmissionResult> future;
 };
+
 
 void handle_signal(int) {
     g_running = 0;
@@ -84,8 +85,7 @@ oj::common::SubmissionResult execute_judge_task(
     dispatcher::WorkerPool& worker_pool,
     std::string submission_id,
     std::string problem_id_text,
-    std::string language,
-    std::string source_code) {
+    std::string language){
     auto record = load_submission_record(submission_id);
 
     try {
@@ -102,7 +102,7 @@ oj::common::SubmissionResult execute_judge_task(
         judge_request.submission_id = numeric_submission_id;
         judge_request.problem_id = problem_id;
         judge_request.language = parse_language(language);
-        judge_request.source_code = source_code;
+        judge_request.source_code = record.source_code;
         judge_request.time_limit_ms = detail->time_limit_ms;
         judge_request.memory_limit_mb = detail->memory_limit_mb;
 
@@ -133,7 +133,10 @@ oj::common::SubmissionResult execute_judge_task(
     return record;
 }
 
-void collect_finished_tasks(std::vector<PendingJudgeTask>& pending_tasks) {
+void collect_finished_tasks(
+    std::vector<PendingJudgeTask>& pending_tasks,
+    oj::common::RabbitMqClient& rabbitmq) {
+
     for (auto it = pending_tasks.begin(); it != pending_tasks.end();) {
         if (it->future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
             ++it;
@@ -143,68 +146,71 @@ void collect_finished_tasks(std::vector<PendingJudgeTask>& pending_tasks) {
         try {
             const auto result = it->future.get();
             save_submission_record(result);
+            rabbitmq.ack(it->delivery_tag);
         } catch (const std::exception& ex) {
             std::fprintf(
                 stderr,
                 "judge_dispatcher failed to finalize submission %s: %s\n",
                 it->submission_id.c_str(),
-                ex.what());
+                ex.what()
+            );
+            rabbitmq.nack_requeue(it->delivery_tag);
         } catch (...) {
             std::fprintf(
                 stderr,
                 "judge_dispatcher failed to finalize submission %s: unknown error\n",
-                it->submission_id.c_str());
+                it->submission_id.c_str()
+            );
+
+            rabbitmq.nack_requeue(it->delivery_tag);
         }
 
         it = pending_tasks.erase(it);
     }
 }
 
-void wait_all_pending_tasks(std::vector<PendingJudgeTask>& pending_tasks) {
-    while (!pending_tasks.empty()) {
-        collect_finished_tasks(pending_tasks);
-        if (!pending_tasks.empty()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-    }
-}
-
 void dispatch_task(
     dispatcher::WorkerPool& worker_pool,
     std::vector<PendingJudgeTask>& pending_tasks,
-    const std::string& payload) {
-    const auto json = crow::json::load(payload);
-    if (!json) {
-        throw std::runtime_error("invalid queue payload");
+    const oj::common::RabbitMqDelivery& delivery) {
+
+    const auto task = oj::common::judge_task_from_json(delivery.body);
+
+    auto record = load_submission_record(task.submission_id);
+
+    // 幂等保护：如果已经是终态，直接不重复评测。
+    if (record.status == "OK" ||
+        record.status == "COMPILE_ERROR" ||
+        record.status == "RUNTIME_ERROR" ||
+        record.status == "TIME_LIMIT_EXCEEDED" ||
+        record.status == "MEMORY_LIMIT_EXCEEDED" ||
+        record.status == "OUTPUT_LIMIT_EXCEEDED" ||
+        record.status == "WRONG_ANSWER" ||
+        record.status == "PRESENTATION_ERROR" ||
+        record.status == "SYSTEM_ERROR" ||
+        record.status == "NOT_FOUND") {
+        return;
     }
 
-    const std::string submission_id =
-        json.has("submission_id") ? std::string{json["submission_id"].s()} : std::string{};
-    const std::string problem_id_text =
-        json.has("problem_id") ? std::string{json["problem_id"].s()} : std::string{};
-    const std::string language =
-        json.has("language") ? std::string{json["language"].s()} : std::string{"cpp"};
-    const std::string source_code =
-        json.has("source_code") ? std::string{json["source_code"].s()} : std::string{};
-
-    auto record = load_submission_record(submission_id);
     record.status = "RUNNING";
     record.accepted = false;
     record.detail = "submission is being judged";
     save_submission_record(record);
 
     pending_tasks.push_back(PendingJudgeTask{
-        submission_id,
+        task.submission_id,
+        delivery.delivery_tag,
         std::async(
             std::launch::async,
-            [&worker_pool, submission_id, problem_id_text, language, source_code]() mutable {
+            [&worker_pool, task]() mutable {
                 return execute_judge_task(
                     worker_pool,
-                    std::move(submission_id),
-                    std::move(problem_id_text),
-                    std::move(language),
-                    std::move(source_code));
-            })
+                    task.submission_id,
+                    task.problem_id,
+                    task.language
+                );
+            }
+        )
     });
 }
 
@@ -214,40 +220,69 @@ int main() {
     std::signal(SIGINT, handle_signal);
     std::signal(SIGTERM, handle_signal);
 
-    const oj::common::RedisConfig redis_config{};
-
-    oj::server::RedisClient redis_client{redis_config};
-    if (!redis_client.available()) {
-        std::fprintf(stderr, "judge_dispatcher: redis unavailable\n");
+    const oj::common::RabbitMqConfig rabbit_config{};
+    oj::common::RabbitMqClient rabbitmq{rabbit_config};
+    if (!rabbitmq.available()) {
+        std::fprintf(
+            stderr,
+            "judge_dispatcher: rabbitmq unavailable: %s\n",
+            rabbitmq.last_error().c_str());
         return 1;
     }
 
     dispatcher::WorkerPool worker_pool{dispatcher::parse_worker_endpoints_from_env()};
     std::vector<PendingJudgeTask> pending_tasks;
-    const auto max_inflight_tasks =
-        std::max<std::size_t>(1, worker_pool.size());
+    const auto max_inflight_tasks = std::max<std::size_t>(1, worker_pool.size());
 
     while (g_running) {
         try {
-            collect_finished_tasks(pending_tasks);
+            collect_finished_tasks(pending_tasks, rabbitmq);
 
             if (pending_tasks.size() >= max_inflight_tasks) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
                 continue;
             }
 
-            const auto payload = redis_client.blpop(redis_config.submission_queue_key, 1);
-            if (!payload) {
+            const auto delivery = rabbitmq.consume_one(1000);
+            if (!delivery) {
                 continue;
             }
 
-            dispatch_task(worker_pool, pending_tasks, *payload);
+            try {
+                const auto task = oj::common::judge_task_from_json(delivery->body);
+                const auto record = load_submission_record(task.submission_id);
+
+                if (record.status == "OK" ||
+                    record.status == "COMPILE_ERROR" ||
+                    record.status == "RUNTIME_ERROR" ||
+                    record.status == "TIME_LIMIT_EXCEEDED" ||
+                    record.status == "MEMORY_LIMIT_EXCEEDED" ||
+                    record.status == "OUTPUT_LIMIT_EXCEEDED" ||
+                    record.status == "WRONG_ANSWER" ||
+                    record.status == "PRESENTATION_ERROR" ||
+                    record.status == "SYSTEM_ERROR" ||
+                    record.status == "NOT_FOUND") {
+                    rabbitmq.ack(delivery->delivery_tag);
+                    continue;
+                }
+
+                dispatch_task(worker_pool, pending_tasks, *delivery);
+            } catch (const std::exception& ex) {
+                std::fprintf(stderr, "invalid judge task: %s\n", ex.what());
+                rabbitmq.reject_dead(delivery->delivery_tag);
+            }
         } catch (const std::exception& ex) {
             std::fprintf(stderr, "judge_dispatcher error: %s\n", ex.what());
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
     }
 
-    wait_all_pending_tasks(pending_tasks);
+    while (!pending_tasks.empty()) {
+        collect_finished_tasks(pending_tasks, rabbitmq);
+        if (!pending_tasks.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+    }
+
     return 0;
 }

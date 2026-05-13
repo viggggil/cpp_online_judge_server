@@ -45,6 +45,31 @@ struct RedisConfig {
     const char* submission_queue_key{env_or_default("OJ_SUBMISSION_QUEUE_KEY", "oj:queue:submissions")};
 };
 
+struct RabbitMqConfig {
+    const char* host{env_or_default("OJ_RABBITMQ_HOST", "127.0.0.1")};
+    int port{env_int_or_default("OJ_RABBITMQ_PORT", 5672)};
+    const char* username{env_or_default("OJ_RABBITMQ_USER", "oj")};
+    const char* password{env_or_default("OJ_RABBITMQ_PASSWORD", "oj_pass")};
+    const char* vhost{env_or_default("OJ_RABBITMQ_VHOST", "/")};
+
+    const char* judge_exchange{
+        env_or_default("OJ_RABBITMQ_JUDGE_EXCHANGE", "oj.judge.exchange")
+    };
+
+    const char* judge_queue{
+        env_or_default("OJ_RABBITMQ_JUDGE_QUEUE", "oj.judge.q")
+    };
+
+    const char* judge_routing_key{
+        env_or_default("OJ_RABBITMQ_JUDGE_ROUTING_KEY", "judge.submit")
+    };
+
+    int prefetch_count{
+        env_int_or_default("OJ_RABBITMQ_PREFETCH", 8)
+    };
+};
+
+
 struct MySqlConfig {
     const char* host{env_or_default("OJ_MYSQL_HOST", "127.0.0.1")};
     int port{env_int_or_default("OJ_MYSQL_PORT", 3306)};

@@ -78,14 +78,12 @@ func collectWorkerStatuses(cfg Config) []WorkerStatus {
 
 func buildWorkersSummary(cfg Config) WorkersSummary {
 	items := collectWorkerStatuses(cfg)
-
 	aliveCount := 0
 	for _, item := range items {
 		if item.Alive {
 			aliveCount++
 		}
 	}
-
 	status := "ok"
 	if aliveCount == 0 {
 		status = "down"
@@ -252,25 +250,20 @@ func summaryHandler(cfg Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 		defer cancel()
-
 		var workers WorkersSummary
 		var redisStatus BasicServiceStatus
 		var mysqlStatus BasicServiceStatus
 		var minioStatus BasicServiceStatus
-
 		var wg sync.WaitGroup
 		wg.Add(4)
-
 		go func() {
 			defer wg.Done()
 			workers = buildWorkersSummary(cfg)
 		}()
-
 		go func() {
 			defer wg.Done()
 			redisStatus = checkRedisHealth(ctx)
 		}()
-
 		go func() {
 			defer wg.Done()
 			mysqlStatus = checkMySQLHealth(ctx)
