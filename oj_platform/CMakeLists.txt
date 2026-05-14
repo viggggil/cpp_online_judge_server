@@ -100,31 +100,75 @@ target_include_directories(problem_migrator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} 
 target_link_libraries(problem_migrator PRIVATE Crow::Crow oj_object_storage ${MYSQLCPP_LIBRARY})
 
 if(OJ_PLATFORM_BUILD_TESTS)
-    include(FetchContent)
-    FetchContent_Declare(
-        googletest
-        URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
-    )
-    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(googletest)
+  include(FetchContent)
 
-    enable_testing()
+  FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+  )
 
-    add_executable(oj_platform_unit_tests
-        tests/protocol_json_test.cpp
-        tests/dispatcher_utils_test.cpp
-        tests/judge_summary_test.cpp
-        tests/judge_core_test.cpp
-        common/protocol_json.cpp
-        services/judge_dispatcher/dispatcher_utils.cpp
-        services/judge_worker/judge_core.cpp
-        services/judge_worker/compile_service.cpp
-        services/judge_worker/run_service.cpp
-        services/judge_worker/judge_summary.cpp
-    )
-    target_include_directories(oj_platform_unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(oj_platform_unit_tests PRIVATE Crow::Crow oj_object_storage GTest::gtest_main)
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
 
-    include(GoogleTest)
-    gtest_discover_tests(oj_platform_unit_tests)
+  enable_testing()
+
+  add_executable(oj_platform_unit_tests
+    tests/protocol_json_test.cpp
+    tests/dispatcher_utils_test.cpp
+    tests/judge_summary_test.cpp
+    tests/judge_core_test.cpp
+
+    tests/platform_config_test.cpp
+    tests/path_utils_test.cpp
+    tests/compile_service_test.cpp
+    tests/run_service_test.cpp
+
+    common/protocol_json.cpp
+    common/path_utils.cpp
+    services/judge_dispatcher/dispatcher_utils.cpp
+    services/judge_worker/judge_core.cpp
+    services/judge_worker/compile_service.cpp
+    services/judge_worker/run_service.cpp
+    services/judge_worker/judge_summary.cpp
+  )
+
+  target_include_directories(oj_platform_unit_tests
+    PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  target_link_libraries(oj_platform_unit_tests
+    PRIVATE
+      Crow::Crow
+      oj_object_storage
+      GTest::gtest_main
+  )
+
+  add_executable(oj_platform_integration_tests
+    tests/judge_worker_http_integration_test.cpp
+    services/judge_worker/routes.cpp
+  )
+
+  target_include_directories(oj_platform_integration_tests
+    PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  target_link_libraries(oj_platform_integration_tests
+    PRIVATE
+      Crow::Crow
+      oj_judge_core
+      GTest::gtest_main
+  )
+
+  include(GoogleTest)
+
+  gtest_discover_tests(oj_platform_unit_tests
+    PROPERTIES TIMEOUT 60
+  )
+
+  gtest_discover_tests(oj_platform_integration_tests
+    PROPERTIES TIMEOUT 90
+  )
 endif()
+

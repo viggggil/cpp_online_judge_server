@@ -110,8 +110,12 @@ CompileResult CompileService::compile(const std::filesystem::path& work_director
         set_limit(RLIMIT_CPU, 10, 10);
         set_limit(RLIMIT_AS, static_cast<rlim_t>(1024) * 1024 * 1024, static_cast<rlim_t>(1024) * 1024 * 1024);
         set_limit(RLIMIT_FSIZE, static_cast<rlim_t>(64) * 1024 * 1024, static_cast<rlim_t>(64) * 1024 * 1024);
-        set_limit(RLIMIT_NPROC, 32, 32);
         set_limit(RLIMIT_NOFILE, 64, 64);
+
+        // g++ 会继续派生 cc1plus / as / ld 等子进程。
+        // 这里如果把 RLIMIT_NPROC 压得太低，会把“当前用户已经存在的线程/进程数”
+        // 也一起算进去，导致编译器自身无法再 vfork 出真正的后端进程。
+        // 这会把正常编译误判成 compile error，因此编译阶段不再额外限制 NPROC。
 
         if (language == "cpp") {
             const std::string source = result.source_path.string();

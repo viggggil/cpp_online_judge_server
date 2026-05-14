@@ -201,13 +201,11 @@ void collect_finished_tasks(
     std::vector<PendingJudgeTask>& pending_tasks,
     oj::common::RabbitMqClient& rabbitmq,
     int max_retry_count) {
-
     for (auto it = pending_tasks.begin(); it != pending_tasks.end();) {
         if (it->future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
             ++it;
             continue;
         }
-
         try {
             const auto result = it->future.get();
             save_submission_record(result);

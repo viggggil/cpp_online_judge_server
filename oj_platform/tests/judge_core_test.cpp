@@ -115,8 +115,10 @@ TEST(JudgeCoreTest, ObjectStorageBackedTestCasesCanBeReadFromLocalCacheFiles) {
     ScopedCurrentPath scoped_path{temp_directory.path()};
 
     const auto cache_directory = temp_directory.path() / "runtime" / "judge_worker" / "object_cache";
-    const auto input_path = cache_directory / "sha-in.in";
-    const auto output_path = cache_directory / "sha-out.out";
+    const auto input_path =
+        cache_directory / "be12e05037b050dcbbbd4339b8dbb0afb703874a46b0b8d209ec3e2c83fb8e80.in";
+    const auto output_path =
+        cache_directory / "54183f4323f377b737433a1e98229ead0fdc686f93bab057ecb612daa94002b5.out";
     write_text_file(input_path, "8 9\n");
     write_text_file(output_path, "17\n");
 
@@ -126,8 +128,8 @@ TEST(JudgeCoreTest, ObjectStorageBackedTestCasesCanBeReadFromLocalCacheFiles) {
         "",
         "objects/case_1.in",
         "objects/case_1.out",
-        "sha-in",
-        "sha-out",
+        "be12e05037b050dcbbbd4339b8dbb0afb703874a46b0b8d209ec3e2c83fb8e80",
+        "54183f4323f377b737433a1e98229ead0fdc686f93bab057ecb612daa94002b5",
         4,
         3,
     }};
