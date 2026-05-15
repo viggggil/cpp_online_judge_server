@@ -201,6 +201,42 @@ void MySqlClient::ensure_schema_upgrades(sql::Connection& connection) const {
             "FOREIGN KEY (assignment_id) REFERENCES assignments(id) "
             "ON DELETE SET NULL ON UPDATE CASCADE");
     }
+
+    statement->execute(
+        "CREATE TABLE IF NOT EXISTS assignment_user_problem_stats ("
+        "assignment_id BIGINT NOT NULL, "
+        "user_id BIGINT NOT NULL, "
+        "problem_id BIGINT NOT NULL, "
+        "username_snapshot VARCHAR(64) NOT NULL, "
+        "submission_count INT NOT NULL DEFAULT 0, "
+        "accepted TINYINT(1) NOT NULL DEFAULT 0, "
+        "first_accepted_at BIGINT NOT NULL DEFAULT 0, "
+        "last_submitted_at BIGINT NOT NULL DEFAULT 0, "
+        "last_status VARCHAR(64) NOT NULL DEFAULT 'UNKNOWN', "
+        "score INT NOT NULL DEFAULT 0, "
+        "penalty_seconds BIGINT NOT NULL DEFAULT 0, "
+        "last_processed_submission_id BIGINT NOT NULL DEFAULT 0, "
+        "updated_at BIGINT NOT NULL, "
+        "PRIMARY KEY (assignment_id, user_id, problem_id), "
+        "KEY idx_assignment_problem (assignment_id, problem_id), "
+        "KEY idx_assignment_user (assignment_id, user_id)"
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    statement->execute(
+        "CREATE TABLE IF NOT EXISTS assignment_user_rank_stats ("
+        "assignment_id BIGINT NOT NULL, "
+        "user_id BIGINT NOT NULL, "
+        "username_snapshot VARCHAR(64) NOT NULL, "
+        "solved_count INT NOT NULL DEFAULT 0, "
+        "score INT NOT NULL DEFAULT 0, "
+        "penalty_seconds BIGINT NOT NULL DEFAULT 0, "
+        "rank_score BIGINT NOT NULL DEFAULT 0, "
+        "last_processed_submission_id BIGINT NOT NULL DEFAULT 0, "
+        "updated_at BIGINT NOT NULL, "
+        "PRIMARY KEY (assignment_id, user_id), "
+        "KEY idx_assignment_rank (assignment_id, solved_count DESC, penalty_seconds ASC, username_snapshot ASC), "
+        "KEY idx_assignment_rank_score (assignment_id, rank_score DESC)"
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
 
 // 建立一条新的 MySQL 连接，并完成建库、选库与会话初始化。

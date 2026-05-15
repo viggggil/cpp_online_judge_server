@@ -49,17 +49,12 @@ std::string assignment_detail_cache_key(std::int64_t assignment_id) {
     return "oj:assignments:detail:" + std::to_string(assignment_id);
 }
 
-std::string assignment_leaderboard_cache_key(std::int64_t assignment_id) {
-    return "oj:assignments:leaderboard:" + std::to_string(assignment_id);
-}
-
 void invalidate_assignment_cache(
     const RedisClient& redis_client,
     std::int64_t assignment_id) {
     redis_client.del(kAssignmentListCacheKey);
     if (assignment_id > 0) {
         redis_client.del(assignment_detail_cache_key(assignment_id));
-        redis_client.del(assignment_leaderboard_cache_key(assignment_id));
     }
 }
 
@@ -1506,20 +1501,6 @@ void register_routes(crow::Crow<>& app) {
 
     CROW_ROUTE(app, "/api/assignments/<int>/leaderboard").methods(crow::HTTPMethod::GET)([](std::int64_t assignment_id) {
         try {
-            const oj::common::RedisConfig redis_config{};
-            RedisClient redis_client{redis_config};
-
-            const auto cache_key = assignment_leaderboard_cache_key(assignment_id);
-
-            if (const auto cached = redis_client.get(cache_key); cached) {
-                crow::response resp;
-                resp.code = 200;
-                resp.set_header("Content-Type", "application/json; charset=utf-8");
-                resp.set_header("X-Cache", "HIT");
-                resp.body = *cached;
-                return resp;
-            }
-
             AssignmentLeaderboardRepository repository;
             const auto leaderboard = repository.find_assignment_leaderboard(assignment_id);
 
@@ -1527,20 +1508,7 @@ void register_routes(crow::Crow<>& app) {
                 return json_error(404, "assignment not found");
             }
 
-            const auto body = make_assignment_leaderboard_json(*leaderboard);
-            const auto payload = body.dump();
-
-            redis_client.setex(
-                cache_key,
-                redis_config.assignment_leaderboard_ttl_seconds,
-                payload);
-
-            crow::response resp;
-            resp.code = 200;
-            resp.set_header("Content-Type", "application/json; charset=utf-8");
-            resp.set_header("X-Cache", "MISS");
-            resp.body = payload;
-            return resp;
+            return crow::response{200, make_assignment_leaderboard_json(*leaderboard)};
         } catch (const std::exception& ex) {
             return json_error(400, ex.what());
         }

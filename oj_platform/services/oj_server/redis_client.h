@@ -3,7 +3,9 @@
 #include "common/platform_config.h"
 
 #include <optional>
+#include <utility>
 #include <string>
+#include <vector>
 
 namespace sw::redis {
 class Redis;
@@ -27,6 +29,13 @@ public:
     bool rpush(const std::string& key, const std::string& value) const;
     std::optional<std::string> blpop(const std::string& key, long long timeout_seconds) const;
     bool del(const std::string& key) const;
+    bool exists(const std::string& key) const;
+    bool expire(const std::string& key, long long ttl_seconds) const;
+    bool zadd(const std::string& key, double score, const std::string& member) const;
+    std::vector<std::pair<std::string, double>> zrevrange_with_scores(
+        const std::string& key,
+        long long start,
+        long long stop) const;
 
 private:
     struct Impl;

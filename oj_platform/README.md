@@ -365,6 +365,74 @@ cmake -S /home/max85/webserver/oj_platform -B /home/max85/webserver/oj_platform/
 cmake --build /home/max85/webserver/oj_platform/build-auth-test -j
 ```
 
+### 测试构建
+
+项目已接入基于 `GoogleTest` 的单元测试与集成测试，默认关闭，需要在配置阶段显式打开：
+
+```bash
+cmake -S /home/max85/webserver/oj_platform \
+  -B /home/max85/webserver/oj_platform/build-tests \
+  -DOJ_PLATFORM_BUILD_TESTS=ON
+
+cmake --build /home/max85/webserver/oj_platform/build-tests -j
+```
+
+构建完成后会生成两个测试目标：
+
+- `oj_platform_unit_tests`
+- `oj_platform_integration_tests`
+
+### 测试运行
+
+推荐直接使用 `ctest` 统一执行：
+
+```bash
+ctest --test-dir /home/max85/webserver/oj_platform/build-tests --output-on-failure
+```
+
+也可以单独运行测试二进制：
+
+```bash
+/home/max85/webserver/oj_platform/build-tests/oj_platform_unit_tests
+/home/max85/webserver/oj_platform/build-tests/oj_platform_integration_tests
+```
+
+如需只验证某一类测试，可配合 `--gtest_filter`：
+
+```bash
+/home/max85/webserver/oj_platform/build-tests/oj_platform_unit_tests \
+  --gtest_filter=CompileServiceTest.*:RunServiceTest.*
+
+/home/max85/webserver/oj_platform/build-tests/oj_platform_integration_tests \
+  --gtest_filter=JudgeWorkerHttpIntegrationTest.*
+```
+
+### 测试覆盖范围
+
+当前测试覆盖以下关键模块：
+
+- 协议编解码：`protocol_json`
+- 调度器工具：worker 地址解析、轮询选择、失败信息归类
+- 判题汇总：测试点结果汇总与最终状态生成
+- 判题核心：请求携带测试点、题目录径回退、本地缓存测试点加载
+- 平台配置：环境变量读取与默认值逻辑
+- 路径工具：项目路径解析、可执行文件目录定位
+- 编译服务：成功编译、编译失败、编译结果产物检查
+- 运行服务：正常执行、运行时错误、超时处理
+- judge_worker HTTP 集成链路：`POST /api/judge` 成功请求与非法 JSON 请求
+
+### 测试说明
+
+- 单元测试主要验证公共工具、判题核心逻辑以及编译/运行组件的本地行为。
+- 集成测试会在进程内启动一个临时 `Crow` 服务，直接调用 `judge_worker` 的 HTTP 路由，验证序列化、路由注册、判题执行与返回结果的完整链路。
+- 测试使用 `tests/test_support/` 下的辅助组件统一处理临时目录、环境变量恢复和最小 HTTP 客户端请求。
+
+### 测试环境要求
+
+- 运行编译与判题相关测试时，本机需要可用的 `g++`。
+- `judge_worker` / `JudgeCore` 的对象缓存测试默认优先命中本地缓存文件，不要求本机必须安装 `mc` 或启动 MinIO。
+- 如在极端受限的沙箱环境中运行测试，若宿主机禁止编译器派生其内部子进程，编译相关测试将无法通过。当前实现已经修正了编译阶段不合理的进程数限制，正常 Linux 开发环境下可稳定通过。
+
 ---
 
 ## 运行

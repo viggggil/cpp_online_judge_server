@@ -2,6 +2,7 @@
 
 #include <sw/redis++/redis++.h>
 
+#include <iterator>
 #include <memory>
 #include <utility>
 
@@ -121,6 +122,60 @@ bool RedisClient::del(const std::string& key) const {
         return true;
     } catch (const sw::redis::Error&) {
         return false;
+    }
+}
+
+bool RedisClient::exists(const std::string& key) const {
+    if (!available()) {
+        return false;
+    }
+
+    try {
+        return impl_->redis->exists(key) > 0;
+    } catch (const sw::redis::Error&) {
+        return false;
+    }
+}
+
+bool RedisClient::expire(const std::string& key, long long ttl_seconds) const {
+    if (!available()) {
+        return false;
+    }
+
+    try {
+        return impl_->redis->expire(key, ttl_seconds);
+    } catch (const sw::redis::Error&) {
+        return false;
+    }
+}
+
+bool RedisClient::zadd(const std::string& key, double score, const std::string& member) const {
+    if (!available()) {
+        return false;
+    }
+
+    try {
+        impl_->redis->zadd(key, member, score);
+        return true;
+    } catch (const sw::redis::Error&) {
+        return false;
+    }
+}
+
+std::vector<std::pair<std::string, double>> RedisClient::zrevrange_with_scores(
+    const std::string& key,
+    long long start,
+    long long stop) const {
+    if (!available()) {
+        return {};
+    }
+
+    try {
+        std::vector<std::pair<std::string, double>> items;
+        impl_->redis->zrevrange(key, start, stop, std::back_inserter(items));
+        return items;
+    } catch (const sw::redis::Error&) {
+        return {};
     }
 }
 
