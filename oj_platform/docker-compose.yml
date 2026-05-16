@@ -222,6 +222,9 @@ services:
       OJ_REDIS_DB: 0
       OJ_REDIS_QUEUE: oj:queue:submissions
       OJ_REDIS_QUEUE_SAMPLE_LIMIT: 50
+      OJ_RABBITMQ_API_URL: http://rabbitmq:15672/api/overview
+      OJ_RABBITMQ_USER: oj
+      OJ_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-oj_pass}
       OJ_MINIO_HEALTH_URL: http://minio:9000/minio/health/live
       OJ_JUDGE_WORKER_HEALTH_1: http://judge_worker_1:18081/api/health
       OJ_JUDGE_WORKER_HEALTH_2: http://judge_worker_2:18081/api/health
@@ -232,6 +235,8 @@ services:
       mysql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
       judge_worker_1:
         condition: service_started

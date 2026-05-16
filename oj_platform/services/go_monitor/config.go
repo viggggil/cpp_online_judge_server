@@ -7,6 +7,9 @@ type Config struct {
 
 	WorkerHealthURLs map[string]string
 	MinIOHealthURL   string
+	RabbitMQAPIURL   string
+	RabbitMQUser     string
+	RabbitMQPassword string
 
 	MySQLHost     string
 	MySQLPort     string
@@ -38,6 +41,12 @@ func LoadConfig() Config {
 			"judge_worker_3": getenv("OJ_JUDGE_WORKER_HEALTH_3", "http://judge_worker_3:18081/api/health"),
 		},
 		MinIOHealthURL: getenv("OJ_MINIO_HEALTH_URL", "http://minio:9000/minio/health/live"),
+		RabbitMQAPIURL: getenv("OJ_RABBITMQ_API_URL", "http://rabbitmq:15672/api/overview"),
+		RabbitMQUser:   getenv("OJ_RABBITMQ_USER", "oj"),
+		RabbitMQPassword: getenv(
+			"OJ_RABBITMQ_PASSWORD",
+			"oj_pass",
+		),
 
 		MySQLHost:     getenv("OJ_MYSQL_HOST", "mysql"),
 		MySQLPort:     getenv("OJ_MYSQL_PORT", "3306"),

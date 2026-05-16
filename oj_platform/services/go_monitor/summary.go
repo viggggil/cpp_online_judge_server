@@ -34,6 +34,7 @@ type MonitorSummary struct {
 	Workers   WorkersSummary     `json:"workers"`
 	Redis     BasicServiceStatus `json:"redis"`
 	MySQL     BasicServiceStatus `json:"mysql"`
+	RabbitMQ  BasicServiceStatus `json:"rabbitmq"`
 	MinIO     BasicServiceStatus `json:"minio"`
 }
 
@@ -233,9 +234,10 @@ func decideOverallStatus(
 	workers WorkersSummary,
 	redis BasicServiceStatus,
 	mysql BasicServiceStatus,
+	rabbitmq BasicServiceStatus,
 	minio BasicServiceStatus,
 ) string {
-	if !redis.Alive || !mysql.Alive || workers.Alive == 0 {
+	if !redis.Alive || !mysql.Alive || !rabbitmq.Alive || workers.Alive == 0 {
 		return "down"
 	}
 
@@ -253,9 +255,10 @@ func summaryHandler(cfg Config) gin.HandlerFunc {
 		var workers WorkersSummary
 		var redisStatus BasicServiceStatus
 		var mysqlStatus BasicServiceStatus
+		var rabbitmqStatus BasicServiceStatus
 		var minioStatus BasicServiceStatus
 		var wg sync.WaitGroup
-		wg.Add(4)
+		wg.Add(5)
 		go func() {
 			defer wg.Done()
 			workers = buildWorkersSummary(cfg)
@@ -267,6 +270,10 @@ func summaryHandler(cfg Config) gin.HandlerFunc {
 		go func() {
 			defer wg.Done()
 			mysqlStatus = checkMySQLHealth(ctx)
+		}()
+		go func() {
+			defer wg.Done()
+			rabbitmqStatus = checkRabbitMQHealth(ctx, cfg)
 		}()
 
 		go func() {
@@ -280,6 +287,7 @@ func summaryHandler(cfg Config) gin.HandlerFunc {
 			workers,
 			redisStatus,
 			mysqlStatus,
+			rabbitmqStatus,
 			minioStatus,
 		)
 
@@ -290,6 +298,7 @@ func summaryHandler(cfg Config) gin.HandlerFunc {
 			Workers:   workers,
 			Redis:     redisStatus,
 			MySQL:     mysqlStatus,
+			RabbitMQ:  rabbitmqStatus,
 			MinIO:     minioStatus,
 		})
 	}

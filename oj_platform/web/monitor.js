@@ -94,6 +94,7 @@ function renderMonitorSummary(summary) {
     <div class="monitor-status-grid">
       ${monitorRenderServiceCard(summary?.mysql)}
       ${monitorRenderServiceCard(summary?.redis)}
+      ${monitorRenderServiceCard(summary?.rabbitmq)}
       ${monitorRenderServiceCard(summary?.minio)}
     </div>
     <div class="monitor-workers-grid">
