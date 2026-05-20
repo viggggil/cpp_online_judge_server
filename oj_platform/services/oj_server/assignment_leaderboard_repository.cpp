@@ -68,7 +68,7 @@ std::vector<RankRow> load_rank_rows_from_mysql(
             "SELECT user_id, username_snapshot, solved_count, score, penalty_seconds, rank_score "
             "FROM assignment_user_rank_stats "
             "WHERE assignment_id = ? "
-            "ORDER BY solved_count DESC, penalty_seconds ASC, username_snapshot ASC, user_id ASC")
+            "ORDER BY rank_score DESC, user_id ASC")
     };
     statement->setInt64(1, assignment_id);
 
@@ -292,16 +292,32 @@ AssignmentLeaderboardRepository::find_assignment_leaderboard(std::int64_t assign
 
     auto problem_rows = load_problem_stats_rows(*connection, assignment_id);
 
-    std::map<std::int64_t, oj::common::AssignmentLeaderboardEntry> entries_by_user;
+    std::vector<oj::common::AssignmentLeaderboardEntry> entries;
+    entries.reserve(rank_rows.size());
+    std::unordered_map<std::int64_t, std::size_t> entry_index_by_user;
+    entry_index_by_user.reserve(rank_rows.size());
+
+    int displayed_rank = 0;
+    int position = 0;
+    std::optional<std::int64_t> previous_rank_score;
+
     for (const auto& rank_row : rank_rows) {
         oj::common::AssignmentLeaderboardEntry entry;
         entry.username = rank_row.username;
-        entry.rank = 0;
-        entry.solved_count = 0;
-        entry.score = 0;
-        entry.penalty_seconds = 0;
+        ++position;
+
+        if (!previous_rank_score || *previous_rank_score != rank_row.rank_score) {
+            displayed_rank = position;
+            previous_rank_score = rank_row.rank_score;
+        }
+
+        entry.rank = displayed_rank;
+        entry.solved_count = rank_row.solved_count;
+        entry.score = rank_row.score;
+        entry.penalty_seconds = rank_row.penalty_seconds;
         initialize_entry_cells(entry, leaderboard.problems);
-        entries_by_user.emplace(rank_row.user_id, std::move(entry));
+        entry_index_by_user.emplace(rank_row.user_id, entries.size());
+        entries.push_back(std::move(entry));
     }
 
     for (const auto& row : problem_rows) {
@@ -310,17 +326,20 @@ AssignmentLeaderboardRepository::find_assignment_leaderboard(std::int64_t assign
             continue;
         }
 
-        auto entry_iter = entries_by_user.find(row.user_id);
-        if (entry_iter == entries_by_user.end()) {
-            oj::common::AssignmentLeaderboardEntry entry;
-            entry.username = row.username;
-            initialize_entry_cells(entry, leaderboard.problems);
-            entry_iter = entries_by_user.emplace(row.user_id, std::move(entry)).first;
+        auto& column = leaderboard.problems.at(problem_iter->second);
+
+        column.submission_count += row.submission_count;
+        if (row.accepted) {
+            column.accepted_user_count += 1;
         }
 
-        auto& entry = entry_iter->second;
+        const auto entry_index_iter = entry_index_by_user.find(row.user_id);
+        if (entry_index_iter == entry_index_by_user.end()) {
+            continue;
+        }
+
+        auto& entry = entries.at(entry_index_iter->second);
         auto& cell = entry.cells.at(problem_iter->second);
-        auto& column = leaderboard.problems.at(problem_iter->second);
 
         cell.problem_id = row.problem_id;
         cell.alias = column.alias;
@@ -335,60 +354,9 @@ AssignmentLeaderboardRepository::find_assignment_leaderboard(std::int64_t assign
         cell.first_accepted_at = row.first_accepted_at;
         cell.last_submitted_at = row.last_submitted_at;
         cell.submission_count = row.submission_count;
-
-        entry.score += row.score;
-        entry.penalty_seconds += row.penalty_seconds;
-        if (row.accepted) {
-            entry.solved_count += 1;
-        }
-
-        column.submission_count += row.submission_count;
-        if (row.accepted) {
-            column.accepted_user_count += 1;
-        }
     }
 
-    leaderboard.entries.reserve(entries_by_user.size());
-    for (auto& item : entries_by_user) {
-        leaderboard.entries.push_back(std::move(item.second));
-    }
-
-    std::sort(
-        leaderboard.entries.begin(),
-        leaderboard.entries.end(),
-        [](const auto& lhs, const auto& rhs) {
-            if (lhs.solved_count != rhs.solved_count) {
-                return lhs.solved_count > rhs.solved_count;
-            }
-
-            if (lhs.penalty_seconds != rhs.penalty_seconds) {
-                return lhs.penalty_seconds < rhs.penalty_seconds;
-            }
-
-            return lhs.username < rhs.username;
-        });
-
-    int displayed_rank = 0;
-    int position = 0;
-
-    std::int64_t previous_solved_count = -1;
-    std::int64_t previous_penalty_seconds = -1;
-
-    for (auto& entry : leaderboard.entries) {
-        ++position;
-
-        const bool same_as_previous =
-            previous_solved_count == entry.solved_count &&
-            previous_penalty_seconds == entry.penalty_seconds;
-
-        if (!same_as_previous) {
-            displayed_rank = position;
-            previous_solved_count = entry.solved_count;
-            previous_penalty_seconds = entry.penalty_seconds;
-        }
-
-        entry.rank = displayed_rank;
-    }
+    leaderboard.entries = std::move(entries);
 
     return leaderboard;
 }

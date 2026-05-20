@@ -107,7 +107,6 @@ func TestNormalizeSubmissionStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := normalizeSubmissionStatus(tt.status, tt.finalStatus)
-
 			if got != tt.want {
 				t.Fatalf("normalizeSubmissionStatus(%q, %q) = %q, want %q",
 					tt.status,
