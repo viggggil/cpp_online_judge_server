@@ -17,10 +17,12 @@ dependencies = [
     { name = "httpx" },
     { name = "langchain" },
     { name = "langchain-chroma" },
+    { name = "langchain-core" },
     { name = "langchain-openai" },
     { name = "langchain-openrouter" },
     { name = "langchain-text-splitters" },
     { name = "langgraph" },
+    { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
 ]
@@ -38,10 +40,12 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain", specifier = ">=1.3.13" },
     { name = "langchain-chroma", specifier = ">=1.1.0" },
+    { name = "langchain-core", specifier = ">=1.4.9" },
     { name = "langchain-openai", specifier = ">=1.3.5" },
     { name = "langchain-openrouter", specifier = ">=0.2.6" },
     { name = "langchain-text-splitters", specifier = ">=1.1.2" },
     { name = "langgraph", specifier = ">=1.2.9" },
+    { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
 ]
@@ -213,15 +217,15 @@ wheels = [
 
 [[package]]
 name = "anyio"
-version = "4.14.1"
+version = "4.14.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "idna" },
     { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3b/72/5562aabb8dd7181e8e860622a38bea08d17842b99ecd4c91f84ac95251b0/anyio-4.14.1.tar.gz", hash = "sha256:8d648a3544c1a700e3ff78615cd679e4c5c3f149904287e73687b2596963629e", size = 254831, upload-time = "2026-06-24T20:56:06.017Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/61/cc/a381afa6efea9f496eff839d4a6a1aed3bfafc7b3ab4b0d1b243a12573dd/anyio-4.14.2.tar.gz", hash = "sha256:cfa139f3ed1a23ee8f88a145ddb5ac7605b8bbfd8592baacd7ce3d8bb4313c7f", size = 260176, upload-time = "2026-07-12T20:29:07.082Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b0/7b/90df4a0a816d98d6ea26f559d87836d494a2cf1fcf063be67df50a7bcc30/anyio-4.14.1-py3-none-any.whl", hash = "sha256:4e5533c5b8ff0a24f5d7a176cbe6877129cd183893f66b537f8f227d10527d72", size = 124875, upload-time = "2026-06-24T20:56:04.413Z" },
+    { url = "https://files.pythonhosted.org/packages/da/35/f2287558c17e29fafc8ef3daf819bb9834061cfa43bff8014f7df7f63bdc/anyio-4.14.2-py3-none-any.whl", hash = "sha256:9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494", size = 125813, upload-time = "2026-07-12T20:29:05.763Z" },
 ]
 
 [[package]]
@@ -1912,7 +1916,7 @@ wheels = [
 
 [[package]]
 name = "openrouter"
-version = "0.11.22"
+version = "0.11.23"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpcore" },
@@ -1920,9 +1924,9 @@ dependencies = [
     { name = "jsonpath-python" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/42/a4/1f96a481ee06c81ac544d694e2a82edc145358f90f1af4d261fe2c12a9fa/openrouter-0.11.22.tar.gz", hash = "sha256:ba6ce3d10af77699955fbb94ebcca90eef26f0d2b7fc22a4b0ea7ed6147369d2", size = 369932, upload-time = "2026-07-11T03:25:21.236Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/e8/b39c1e348a855ef91855a3c7b997c81f2a2ea384407a0571d69f9478e3c5/openrouter-0.11.23.tar.gz", hash = "sha256:9b533c0a284b5d2b92b552e41df71eac1de1c2a531a6e4a8f1b1a60b1c6d501d", size = 369933, upload-time = "2026-07-12T16:43:18.378Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/65/fe/5c587b0d033e1480b136116cc87231934e76c59f1ded57e19431d32edc52/openrouter-0.11.22-py3-none-any.whl", hash = "sha256:e653b2e2f9c7bbbc1aedb4cb518e76c7988df66984c320bbbe77033096d76271", size = 817546, upload-time = "2026-07-11T03:25:19.891Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/07/397381607f0db590df5f12ee6f1ba9d0fb8279a35547219ae35fc5a9e754/openrouter-0.11.23-py3-none-any.whl", hash = "sha256:132b505cc3efce60923a3b761b2f949bd02b6f79f478eac0bf31e671e135bcb9", size = 817545, upload-time = "2026-07-12T16:43:16.933Z" },
 ]
 
 [[package]]

@@ -1,14 +1,11 @@
 from fastapi import FastAPI
 
+from app.api.health import router as health_router
+
+
 app = FastAPI(
     title="OJ Programming Tutor",
     version="0.1.0",
 )
 
-
-@app.get("/health")
-async def health_check() -> dict[str, str]:
-    return {
-        "status": "ok",
-        "service": "oj-programming-tutor",
-    }
+app.include_router(health_router)
