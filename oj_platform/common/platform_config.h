@@ -32,6 +32,14 @@ struct AuthConfig {
     const char* admin_register_code{env_or_default("OJ_ADMIN_REGISTER_CODE", "")};
 };
 
+struct AiInternalApiConfig {
+    const char* internal_token{
+        env_or_default(
+            "OJ_INTERNAL_API_TOKEN",
+            env_or_default("INTERNAL_API_TOKEN", ""))
+    };
+};
+
 struct RedisConfig {
     const char* host{env_or_default("OJ_REDIS_HOST", "127.0.0.1")};
     int port{env_int_or_default("OJ_REDIS_PORT", 6379)};

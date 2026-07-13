@@ -983,11 +983,33 @@ Content-Type: application/json
 
 ---
 
-# 17. C++ OJ 内部 API
+# 17. C++ OJ 对 Agent Service 暴露的内部 API
 
-Agent 不直接访问 OJ 数据库。
+Agent Service 不直接访问 OJ 数据库。题目、提交、用户题目状态、AI 对话库查询均通过 `oj_server` 的 `/api/ai` 内部接口完成。
 
-## 17.1 `GET /internal/ai/problems/{problem_id}`
+所有 `/api/ai` 接口必须携带内部 Token：
+
+```http
+X-Internal-Token: <token>
+```
+
+其中需要校验用户数据归属的接口必须额外携带：
+
+```http
+X-User-Id: 1001
+```
+
+`oj_server` 侧读取 `OJ_INTERNAL_API_TOKEN`，未设置时兼容读取 `INTERNAL_API_TOKEN`。Token 错误返回 `401`。
+
+命名规则：
+
+- 对外用户 API 使用 `/api/problems`、`/api/submissions` 等现有命名；
+- Agent 内部 API 统一使用 `/api/ai/...`；
+- 路径名保持复数资源风格，例如 `problems`、`submissions`、`conversations`。
+
+## 17.1 `GET /api/ai/problems/{problem_id}`
+
+用途：返回模型可用的公开题目信息。
 
 返回：
 
@@ -996,13 +1018,11 @@ Agent 不直接访问 OJ 数据库。
   "problem_id": 1002,
   "title": "两数之和",
   "description_markdown": "...",
-  "input_description": "...",
-  "output_description": "...",
-  "public_examples": [
-    {"input": "...", "output": "..."}
-  ],
+  "input_description": "",
+  "output_description": "",
+  "public_examples": [],
   "tags": ["array", "hash_table"],
-  "difficulty": "easy",
+  "difficulty": "",
   "time_limit_ms": 1000,
   "memory_limit_mb": 128
 }
@@ -1010,11 +1030,14 @@ Agent 不直接访问 OJ 数据库。
 
 不得返回隐藏测试和私有题解。
 
-## 17.2 `GET /internal/ai/submissions/{submission_id}`
+## 17.2 `GET /api/ai/submissions/{submission_id}`
+
+用途：返回当前用户自己的提交上下文，供诊断和多轮辅导使用。
 
 Header：
 
 ```http
+X-Internal-Token: <token>
 X-User-Id: 1001
 ```
 
@@ -1028,33 +1051,144 @@ submission.owner_user_id == X-User-Id
 
 ```json
 {
-  "submission_id": 501,
+  "submission_id": "sub-501",
   "problem_id": 1002,
   "owner_user_id": 1001,
   "language": "cpp17",
   "source_code": "...",
-  "judge_status": "time_limit_exceeded",
-  "compiler_output": null,
-  "runtime_stderr": null,
+  "judge_status": "TIME_LIMIT_EXCEEDED",
+  "compiler_output": "",
+  "runtime_stderr": "",
   "execution_time_ms": 1001,
   "memory_usage_kb": 2048,
-  "submitted_at": "2026-07-13T05:30:00Z"
+  "submitted_at": 1783920600
 }
 ```
 
-## 17.3 `GET /internal/ai/users/{user_id}/submissions`
+## 17.3 `GET /api/ai/users/{user_id}/problems/{problem_id}`
+
+返回当前用户当前题目的尝试次数、是否通过、最新状态和时间。
+
+Header：
+
+```http
+X-Internal-Token: <token>
+```
+
+返回：
+
+```json
+{
+  "user_id": 1001,
+  "problem_id": 1002,
+  "submission_count": 3,
+  "accepted": false,
+  "last_status": "TIME_LIMIT_EXCEEDED",
+  "last_submitted_at": 1783920600
+}
+```
+
+## 17.4 `GET /api/ai/users/{user_id}/conversations`
+
+用途：查询某个用户的 AI 对话列表，用于历史对话入口、继续对话前的会话选择，以及 Agent Service 恢复上下文。
+
+Header：
+
+```http
+X-Internal-Token: <token>
+```
 
 Query：
 
-```text
-problem_id=1002&limit=10
+| 参数 | 必填 | 说明 |
+|---|---:|---|
+| `problem_id` | 否 | 只查询某道题的对话 |
+| `limit` | 否 | 默认 20，最大 100 |
+
+返回：
+
+```json
+{
+  "user_id": 1001,
+  "problem_id": 1002,
+  "conversations": [
+    {
+      "conversation_id": "conv_01J...",
+      "user_id": 1001,
+      "problem_id": 1002,
+      "submission_id": "sub-501",
+      "title": "为什么这次提交会超时？",
+      "hint_level": 2,
+      "round_count": 3,
+      "status": "active",
+      "last_message_at": 1783920800,
+      "created_at": 1783920600,
+      "updated_at": 1783920800
+    }
+  ]
+}
 ```
 
-用于多轮辅导和后续学习画像。
+## 17.5 `GET /api/ai/conversations/{conversation_id}`
 
-## 17.4 `GET /internal/ai/users/{user_id}/problems/{problem_id}/status`
+用途：查询单个对话及其全部轮次消息。`oj_server` 必须使用 `X-User-Id` 校验该对话属于当前用户。
 
-返回尝试次数、是否通过、最新状态和时间。
+Header：
+
+```http
+X-Internal-Token: <token>
+X-User-Id: 1001
+```
+
+返回：
+
+```json
+{
+  "conversation": {
+    "conversation_id": "conv_01J...",
+    "user_id": 1001,
+    "problem_id": 1002,
+    "submission_id": "sub-501",
+    "title": "为什么这次提交会超时？",
+    "hint_level": 2,
+    "round_count": 3,
+    "status": "active",
+    "last_message_at": 1783920800,
+    "created_at": 1783920600,
+    "updated_at": 1783920800
+  },
+  "messages": [
+    {
+      "message_id": "msg_01J...",
+      "round_no": 1,
+      "hint_level": 2,
+      "request_id": "01J...",
+      "user_content": "为什么这次提交会超时？",
+      "assistant_content": "当前实现可能存在重复遍历...",
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DigitalOcean",
+      "finish_reason": "stop",
+      "prompt_tokens": 1200,
+      "completion_tokens": 350,
+      "total_tokens": 1550,
+      "latency_ms": 8200,
+      "knowledge_points_text": "time_complexity,hash_table",
+      "sources_json": "[...]",
+      "safety_flags_json": "{}",
+      "error_type": "time_limit_exceeded",
+      "confidence": 0.91,
+      "created_at": 1783920600
+    }
+  ]
+}
+```
+
+说明：
+
+- `ai_conversation` 和 `ai_message` 由 `oj_server` 管理；
+- `ai_message` 当前按“一轮用户提问 + 一轮模型回答”存一条记录；
+- `sources_json`、`safety_flags_json` 由 `oj_server` 原样保存和返回，Agent Service 读取后自行解析；
+- 对话不存在或不属于 `X-User-Id` 时返回 `404`。
 
 ---
 
@@ -1162,6 +1296,7 @@ LOG_LEVEL=INFO
 
 INTERNAL_API_TOKEN=
 OJ_SERVER_BASE_URL=http://127.0.0.1:8080
+OJ_INTERNAL_API_TOKEN=
 OJ_CONNECT_TIMEOUT_SECONDS=5
 OJ_READ_TIMEOUT_SECONDS=15
 
@@ -1575,6 +1710,4 @@ tests/unit/test_openrouter_client.py
 tests/unit/test_diagnosis_schema.py
 tests/integration/test_diagnosis_api.py
 ```
-
-
 
