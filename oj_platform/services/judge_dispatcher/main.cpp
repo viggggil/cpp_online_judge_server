@@ -4,8 +4,8 @@
 #include "common/rabbitmq_client.h"
 #include "services/judge_dispatcher/dispatcher_utils.h"
 #include "services/judge_dispatcher/worker_client.h"
-#include "services/oj_server/problem_repository.h"
-#include "services/oj_server/submission_repository.h"
+#include "services/oj_server/data/problem_repository.h"
+#include "services/oj_server/data/submission_repository.h"
 
 #include <chrono>
 #include <csignal>

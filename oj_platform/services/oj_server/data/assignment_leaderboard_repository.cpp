@@ -1,7 +1,7 @@
-#include "services/oj_server/assignment_leaderboard_repository.h"
+#include "services/oj_server/data/assignment_leaderboard_repository.h"
 
 #include "common/platform_config.h"
-#include "services/oj_server/redis_client.h"
+#include "services/oj_server/data/redis_client.h"
 
 #include <cppconn/prepared_statement.h>
 #include <cppconn/resultset.h>

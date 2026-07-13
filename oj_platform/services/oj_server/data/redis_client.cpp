@@ -1,4 +1,4 @@
-#include "services/oj_server/redis_client.h"
+#include "services/oj_server/data/redis_client.h"
 
 #include <sw/redis++/redis++.h>
 

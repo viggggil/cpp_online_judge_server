@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common/platform_types.h"
-#include "services/oj_server/mysql_client.h"
+#include "services/oj_server/data/mysql_client.h"
 
 #include <cstdint>
 #include <optional>

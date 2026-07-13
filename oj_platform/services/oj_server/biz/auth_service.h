@@ -1,9 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
-#include "services/oj_server/mysql_client.h"
+#include "services/oj_server/data/mysql_client.h"
 
 namespace oj::server {
 
@@ -28,6 +29,7 @@ public:
                            const std::string& admin_code) const;
     std::string login_user(const std::string& username, const std::string& password) const;
     std::optional<AuthenticatedUser> verify_token(const std::string& token) const;
+    std::optional<std::int64_t> find_user_id(const std::string& username) const;
 
 private:
     MySqlClient mysql_client_;

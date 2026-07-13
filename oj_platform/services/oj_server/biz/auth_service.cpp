@@ -1,4 +1,4 @@
-#include "services/oj_server/auth_service.h"
+#include "services/oj_server/biz/auth_service.h"
 
 #include "common/platform_config.h"
 
@@ -277,6 +277,25 @@ std::optional<AuthenticatedUser> AuthService::verify_token(const std::string& to
         return std::nullopt;
     }
     return parse_token(token);
+}
+
+std::optional<std::int64_t> AuthService::find_user_id(const std::string& username) const {
+    if (username.empty()) {
+        return std::nullopt;
+    }
+
+    auto connection = mysql_client_.create_connection();
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement("SELECT id FROM users WHERE username = ?")
+    };
+    statement->setString(1, username);
+
+    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+    if (!result->next()) {
+        return std::nullopt;
+    }
+
+    return result->getInt64("id");
 }
 
 } // namespace oj::server

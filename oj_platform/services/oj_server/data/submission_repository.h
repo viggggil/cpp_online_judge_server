@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common/platform_types.h"
-#include "services/oj_server/mysql_client.h"
+#include "services/oj_server/data/mysql_client.h"
 
 #include <optional>
 #include <string>
@@ -14,6 +14,29 @@ struct StoredSubmission {
     std::string username;
     std::int64_t created_at{0};
     std::int64_t updated_at{0};
+};
+
+struct AiSubmissionContext {
+    std::string submission_id;
+    std::int64_t problem_id{0};
+    std::int64_t owner_user_id{0};
+    std::string language;
+    std::string source_code;
+    std::string judge_status;
+    std::string compiler_output;
+    std::string runtime_stderr;
+    int execution_time_ms{0};
+    int memory_usage_kb{0};
+    std::int64_t submitted_at{0};
+};
+
+struct AiProblemStatus {
+    std::int64_t user_id{0};
+    std::int64_t problem_id{0};
+    std::int64_t submission_count{0};
+    bool accepted{false};
+    std::string last_status{"NONE"};
+    std::int64_t last_submitted_at{0};
 };
 
 class SubmissionRepository {
@@ -37,6 +60,12 @@ public:
     std::vector<oj::common::ProblemUserStatus> list_problem_statuses_for_user_in_assignment(
         const std::string& username,
         std::int64_t assignment_id) const;
+    std::optional<AiSubmissionContext> find_ai_submission_for_user(
+        std::int64_t user_id,
+        const std::string& submission_id) const;
+    AiProblemStatus find_ai_problem_status(
+        std::int64_t user_id,
+        std::int64_t problem_id) const;
 
 private:
     MySqlClient mysql_client_;

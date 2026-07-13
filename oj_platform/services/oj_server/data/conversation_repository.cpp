@@ -1,0 +1,151 @@
+#include "services/oj_server/data/conversation_repository.h"
+
+#include <cppconn/prepared_statement.h>
+#include <cppconn/resultset.h>
+
+#include <memory>
+#include <utility>
+
+namespace oj::server {
+
+namespace {
+
+AiConversationSummary build_conversation_summary(sql::ResultSet& row) {
+    AiConversationSummary item;
+    item.conversation_id = row.getString("conversation_id");
+    item.user_id = row.getInt64("user_id");
+    item.problem_id = row.getInt64("problem_id");
+    if (!row.isNull("submission_id")) {
+        item.submission_id = row.getString("submission_id");
+    }
+    item.title = row.getString("title");
+    item.hint_level = row.getInt("hint_level");
+    item.round_count = row.getInt("round_count");
+    item.status = row.getString("status");
+    item.last_message_at = row.getInt64("last_message_at");
+    item.created_at = row.getInt64("created_at");
+    item.updated_at = row.getInt64("updated_at");
+    return item;
+}
+
+AiMessageRecord build_message_record(sql::ResultSet& row) {
+    AiMessageRecord message;
+    message.message_id = row.getString("message_id");
+    message.round_no = row.getInt("round_no");
+    message.hint_level = row.getInt("hint_level");
+    message.request_id = row.getString("request_id");
+    message.user_content = row.getString("user_content");
+    message.assistant_content = row.getString("assistant_content");
+    message.model = row.getString("model");
+    message.provider = row.getString("provider");
+    message.finish_reason = row.getString("finish_reason");
+    message.prompt_tokens = row.getInt("prompt_tokens");
+    message.completion_tokens = row.getInt("completion_tokens");
+    message.total_tokens = row.getInt("total_tokens");
+    message.latency_ms = row.getInt("latency_ms");
+    message.knowledge_points_text = row.getString("knowledge_points_text");
+    message.sources_json =
+        row.isNull("sources_json") ? "" : row.getString("sources_json");
+    message.safety_flags_json =
+        row.isNull("safety_flags_json") ? "" : row.getString("safety_flags_json");
+    message.error_type = row.getString("error_type");
+    if (!row.isNull("confidence")) {
+        message.confidence = static_cast<double>(row.getDouble("confidence"));
+    }
+    message.created_at = row.getInt64("created_at");
+    return message;
+}
+
+} // namespace
+
+ConversationRepository::ConversationRepository()
+    : mysql_client_{} {}
+
+ConversationRepository::ConversationRepository(MySqlClient mysql_client)
+    : mysql_client_(std::move(mysql_client)) {}
+
+std::vector<AiConversationSummary> ConversationRepository::list_for_user(
+    std::int64_t user_id,
+    std::optional<std::int64_t> problem_id,
+    int limit) const {
+    auto connection = mysql_client_.create_connection();
+
+    std::unique_ptr<sql::PreparedStatement> statement;
+    if (problem_id) {
+        statement.reset(connection->prepareStatement(
+            "SELECT conversation_id, user_id, problem_id, submission_id, title, "
+            "hint_level, round_count, status, last_message_at, created_at, updated_at "
+            "FROM ai_conversation "
+            "WHERE user_id = ? AND problem_id = ? "
+            "ORDER BY updated_at DESC, id DESC "
+            "LIMIT ?"));
+        statement->setInt64(1, user_id);
+        statement->setInt64(2, *problem_id);
+        statement->setInt(3, limit);
+    } else {
+        statement.reset(connection->prepareStatement(
+            "SELECT conversation_id, user_id, problem_id, submission_id, title, "
+            "hint_level, round_count, status, last_message_at, created_at, updated_at "
+            "FROM ai_conversation "
+            "WHERE user_id = ? "
+            "ORDER BY updated_at DESC, id DESC "
+            "LIMIT ?"));
+        statement->setInt64(1, user_id);
+        statement->setInt(2, limit);
+    }
+
+    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+    std::vector<AiConversationSummary> conversations;
+    while (result->next()) {
+        conversations.push_back(build_conversation_summary(*result));
+    }
+    return conversations;
+}
+
+std::optional<AiConversationDetail> ConversationRepository::find_for_user(
+    std::int64_t user_id,
+    const std::string& conversation_id) const {
+    auto connection = mysql_client_.create_connection();
+    auto conversation_statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "SELECT id, conversation_id, user_id, problem_id, submission_id, title, "
+            "hint_level, round_count, status, last_message_at, created_at, updated_at "
+            "FROM ai_conversation "
+            "WHERE conversation_id = ? AND user_id = ?")
+    };
+    conversation_statement->setString(1, conversation_id);
+    conversation_statement->setInt64(2, user_id);
+
+    auto conversation_result =
+        std::unique_ptr<sql::ResultSet>{conversation_statement->executeQuery()};
+    if (!conversation_result->next()) {
+        return std::nullopt;
+    }
+
+    const auto conversation_db_id = conversation_result->getInt64("id");
+
+    AiConversationDetail detail;
+    detail.conversation = build_conversation_summary(*conversation_result);
+
+    auto message_statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "SELECT "
+            "message_id, round_no, hint_level, request_id, user_content, "
+            "assistant_content, model, provider, finish_reason, prompt_tokens, "
+            "completion_tokens, total_tokens, latency_ms, knowledge_points_text, "
+            "sources_json, safety_flags_json, error_type, confidence, created_at "
+            "FROM ai_message "
+            "WHERE conversation_db_id = ? "
+            "ORDER BY round_no ASC, id ASC")
+    };
+    message_statement->setInt64(1, conversation_db_id);
+
+    auto message_result = std::unique_ptr<sql::ResultSet>{message_statement->executeQuery()};
+    while (message_result->next()) {
+        detail.messages.push_back(build_message_record(*message_result));
+    }
+
+    return detail;
+}
+
+} // namespace oj::server

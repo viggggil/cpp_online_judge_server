@@ -1,5 +1,5 @@
 #include "common/platform_config.h"
-#include "services/oj_server/routes.h"
+#include "services/oj_server/server/routes.h"
 
 #include <crow.h>
 

@@ -1,4 +1,4 @@
-#include "services/oj_server/assignment_repository.h"
+#include "services/oj_server/data/assignment_repository.h"
 
 #include <algorithm>
 #include <chrono>

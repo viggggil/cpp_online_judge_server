@@ -1,16 +1,16 @@
-#include "services/oj_server/routes.h"
+#include "services/oj_server/server/routes.h"
 
 #include "common/path_utils.h"
 #include "common/platform_config.h"
-#include "services/oj_server/assignment_leaderboard_repository.h"
-#include "services/oj_server/assignment_repository.h"
-#include "services/oj_server/auth_service.h"
-#include "services/oj_server/judge_service.h"
-#include "services/oj_server/mysql_client.h"
-#include "services/oj_server/problem_importer.h"
-#include "services/oj_server/problem_repository.h"
-#include "services/oj_server/redis_client.h"
-#include "services/oj_server/submission_repository.h"
+#include "services/oj_server/data/assignment_leaderboard_repository.h"
+#include "services/oj_server/data/assignment_repository.h"
+#include "services/oj_server/biz/auth_service.h"
+#include "services/oj_server/data/conversation_repository.h"
+#include "services/oj_server/biz/judge_service.h"
+#include "services/oj_server/biz/problem_importer.h"
+#include "services/oj_server/data/problem_repository.h"
+#include "services/oj_server/data/redis_client.h"
+#include "services/oj_server/data/submission_repository.h"
 
 #include <crow.h>
 
@@ -30,9 +30,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-#include <cppconn/prepared_statement.h>
-#include <cppconn/resultset.h>
 
 namespace oj::server {
 
@@ -107,27 +104,6 @@ std::optional<std::int64_t> parse_int64_header(
     } catch (...) {
         return std::nullopt;
     }
-}
-
-std::optional<std::int64_t> find_user_id_by_username(
-    const MySqlClient& mysql_client,
-    const std::string& username) {
-    if (username.empty()) {
-        return std::nullopt;
-    }
-
-    auto connection = mysql_client.create_connection();
-    auto statement = std::unique_ptr<sql::PreparedStatement>{
-        connection->prepareStatement("SELECT id FROM users WHERE username = ?")
-    };
-    statement->setString(1, username);
-
-    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
-    if (!result->next()) {
-        return std::nullopt;
-    }
-
-    return result->getInt64("id");
 }
 
 crow::response json_error(int code, const std::string& message) {
@@ -317,155 +293,64 @@ crow::json::wvalue make_ai_problem_json(
     return body;
 }
 
-std::optional<crow::json::wvalue> load_ai_submission_json(
-    std::int64_t authenticated_user_id,
-    const std::string& submission_id) {
-    MySqlClient mysql_client;
-    auto connection = mysql_client.create_connection();
-    auto statement = std::unique_ptr<sql::PreparedStatement>{
-        connection->prepareStatement(
-            "SELECT "
-            "id, submission_id, user_id, problem_id, language, source_code, "
-            "final_status, compile_stderr, system_message, total_time_used_ms, "
-            "peak_memory_used_kb, created_at "
-            "FROM submissions "
-            "WHERE submission_id = ? AND user_id = ?")
-    };
-    statement->setString(1, submission_id);
-    statement->setInt64(2, authenticated_user_id);
-
-    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
-    if (!result->next()) {
+std::optional<crow::json::wvalue> make_ai_submission_json(
+    const std::optional<AiSubmissionContext>& context) {
+    if (!context) {
         return std::nullopt;
     }
-
     crow::json::wvalue body;
-    body["submission_id"] = result->getString("submission_id");
-    body["problem_id"] = result->getInt64("problem_id");
-    body["owner_user_id"] = result->getInt64("user_id");
-    body["language"] = result->getString("language");
-    body["source_code"] = result->getString("source_code");
-    body["judge_status"] = result->getString("final_status");
-    body["compiler_output"] = result->getString("compile_stderr");
-    body["runtime_stderr"] = result->getString("system_message");
-    body["execution_time_ms"] = result->getInt("total_time_used_ms");
-    body["memory_usage_kb"] = result->getInt("peak_memory_used_kb");
-    body["submitted_at"] = result->getInt64("created_at");
+    body["submission_id"] = context->submission_id;
+    body["problem_id"] = context->problem_id;
+    body["owner_user_id"] = context->owner_user_id;
+    body["language"] = context->language;
+    body["source_code"] = context->source_code;
+    body["judge_status"] = context->judge_status;
+    body["compiler_output"] = context->compiler_output;
+    body["runtime_stderr"] = context->runtime_stderr;
+    body["execution_time_ms"] = context->execution_time_ms;
+    body["memory_usage_kb"] = context->memory_usage_kb;
+    body["submitted_at"] = context->submitted_at;
     return body;
 }
 
-crow::json::wvalue load_ai_problem_status_json(
-    std::int64_t user_id,
-    std::int64_t problem_id) {
-    MySqlClient mysql_client;
-    auto connection = mysql_client.create_connection();
-    auto statement = std::unique_ptr<sql::PreparedStatement>{
-        connection->prepareStatement(
-            "SELECT "
-            "COUNT(*) AS submission_count, "
-            "MAX(CASE WHEN accepted = 1 THEN 1 ELSE 0 END) AS accepted, "
-            "MAX(created_at) AS last_submitted_at "
-            "FROM submissions "
-            "WHERE user_id = ? AND problem_id = ?")
-    };
-    statement->setInt64(1, user_id);
-    statement->setInt64(2, problem_id);
-
-    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
-
-    std::int64_t submission_count = 0;
-    bool accepted = false;
-    std::int64_t last_submitted_at = 0;
-    if (result->next()) {
-        submission_count = result->getInt64("submission_count");
-        accepted = result->getBoolean("accepted");
-        last_submitted_at =
-            result->isNull("last_submitted_at") ? 0 : result->getInt64("last_submitted_at");
-    }
-
-    std::string last_status = "NONE";
-    if (submission_count > 0) {
-        auto last_statement = std::unique_ptr<sql::PreparedStatement>{
-            connection->prepareStatement(
-                "SELECT final_status "
-                "FROM submissions "
-                "WHERE user_id = ? AND problem_id = ? "
-                "ORDER BY created_at DESC, id DESC "
-                "LIMIT 1")
-        };
-        last_statement->setInt64(1, user_id);
-        last_statement->setInt64(2, problem_id);
-        auto last_result = std::unique_ptr<sql::ResultSet>{last_statement->executeQuery()};
-        if (last_result->next()) {
-            last_status = last_result->getString("final_status");
-        }
-    }
-
+crow::json::wvalue make_ai_problem_status_json(const AiProblemStatus& status) {
     crow::json::wvalue body;
-    body["user_id"] = user_id;
-    body["problem_id"] = problem_id;
-    body["submission_count"] = submission_count;
-    body["accepted"] = accepted;
-    body["last_status"] = last_status;
-    body["last_submitted_at"] = last_submitted_at;
+    body["user_id"] = status.user_id;
+    body["problem_id"] = status.problem_id;
+    body["submission_count"] = status.submission_count;
+    body["accepted"] = status.accepted;
+    body["last_status"] = status.last_status;
+    body["last_submitted_at"] = status.last_submitted_at;
     return body;
 }
 
-crow::json::wvalue make_ai_conversation_row_json(sql::ResultSet& row) {
+crow::json::wvalue make_ai_conversation_json(const AiConversationSummary& conversation) {
     crow::json::wvalue item;
-    item["conversation_id"] = row.getString("conversation_id");
-    item["user_id"] = row.getInt64("user_id");
-    item["problem_id"] = row.getInt64("problem_id");
-    if (row.isNull("submission_id")) {
-        item["submission_id"] = nullptr;
+    item["conversation_id"] = conversation.conversation_id;
+    item["user_id"] = conversation.user_id;
+    item["problem_id"] = conversation.problem_id;
+    if (conversation.submission_id) {
+        item["submission_id"] = *conversation.submission_id;
     } else {
-        item["submission_id"] = row.getString("submission_id");
+        item["submission_id"] = nullptr;
     }
-    item["title"] = row.getString("title");
-    item["hint_level"] = row.getInt("hint_level");
-    item["round_count"] = row.getInt("round_count");
-    item["status"] = row.getString("status");
-    item["last_message_at"] = row.getInt64("last_message_at");
-    item["created_at"] = row.getInt64("created_at");
-    item["updated_at"] = row.getInt64("updated_at");
+    item["title"] = conversation.title;
+    item["hint_level"] = conversation.hint_level;
+    item["round_count"] = conversation.round_count;
+    item["status"] = conversation.status;
+    item["last_message_at"] = conversation.last_message_at;
+    item["created_at"] = conversation.created_at;
+    item["updated_at"] = conversation.updated_at;
     return item;
 }
 
-crow::json::wvalue load_ai_conversation_list_json(
+crow::json::wvalue make_ai_conversation_list_json(
     std::int64_t user_id,
     std::optional<std::int64_t> problem_id,
-    int limit) {
-    MySqlClient mysql_client;
-    auto connection = mysql_client.create_connection();
-
-    std::unique_ptr<sql::PreparedStatement> statement;
-    if (problem_id) {
-        statement.reset(connection->prepareStatement(
-            "SELECT conversation_id, user_id, problem_id, submission_id, title, "
-            "hint_level, round_count, status, last_message_at, created_at, updated_at "
-            "FROM ai_conversation "
-            "WHERE user_id = ? AND problem_id = ? "
-            "ORDER BY updated_at DESC, id DESC "
-            "LIMIT ?"));
-        statement->setInt64(1, user_id);
-        statement->setInt64(2, *problem_id);
-        statement->setInt(3, limit);
-    } else {
-        statement.reset(connection->prepareStatement(
-            "SELECT conversation_id, user_id, problem_id, submission_id, title, "
-            "hint_level, round_count, status, last_message_at, created_at, updated_at "
-            "FROM ai_conversation "
-            "WHERE user_id = ? "
-            "ORDER BY updated_at DESC, id DESC "
-            "LIMIT ?"));
-        statement->setInt64(1, user_id);
-        statement->setInt(2, limit);
-    }
-
-    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+    const std::vector<AiConversationSummary>& records) {
     crow::json::wvalue::list conversations;
-    while (result->next()) {
-        conversations.push_back(make_ai_conversation_row_json(*result));
+    for (const auto& record : records) {
+        conversations.push_back(make_ai_conversation_json(record));
     }
 
     crow::json::wvalue body;
@@ -477,77 +362,43 @@ crow::json::wvalue load_ai_conversation_list_json(
     return body;
 }
 
-std::optional<crow::json::wvalue> load_ai_conversation_detail_json(
-    std::int64_t user_id,
-    const std::string& conversation_id) {
-    MySqlClient mysql_client;
-    auto connection = mysql_client.create_connection();
-    auto conversation_statement = std::unique_ptr<sql::PreparedStatement>{
-        connection->prepareStatement(
-            "SELECT id, conversation_id, user_id, problem_id, submission_id, title, "
-            "hint_level, round_count, status, last_message_at, created_at, updated_at "
-            "FROM ai_conversation "
-            "WHERE conversation_id = ? AND user_id = ?")
-    };
-    conversation_statement->setString(1, conversation_id);
-    conversation_statement->setInt64(2, user_id);
-
-    auto conversation_result =
-        std::unique_ptr<sql::ResultSet>{conversation_statement->executeQuery()};
-    if (!conversation_result->next()) {
+std::optional<crow::json::wvalue> make_ai_conversation_detail_json(
+    const std::optional<AiConversationDetail>& detail) {
+    if (!detail) {
         return std::nullopt;
     }
 
-    const auto conversation_db_id = conversation_result->getInt64("id");
-    auto conversation = make_ai_conversation_row_json(*conversation_result);
-
-    auto message_statement = std::unique_ptr<sql::PreparedStatement>{
-        connection->prepareStatement(
-            "SELECT "
-            "message_id, round_no, hint_level, request_id, user_content, "
-            "assistant_content, model, provider, finish_reason, prompt_tokens, "
-            "completion_tokens, total_tokens, latency_ms, knowledge_points_text, "
-            "sources_json, safety_flags_json, error_type, confidence, created_at "
-            "FROM ai_message "
-            "WHERE conversation_db_id = ? "
-            "ORDER BY round_no ASC, id ASC")
-    };
-    message_statement->setInt64(1, conversation_db_id);
-
-    auto message_result = std::unique_ptr<sql::ResultSet>{message_statement->executeQuery()};
     crow::json::wvalue::list messages;
-    while (message_result->next()) {
+    for (const auto& record : detail->messages) {
         crow::json::wvalue message;
-        message["message_id"] = message_result->getString("message_id");
-        message["round_no"] = message_result->getInt("round_no");
-        message["hint_level"] = message_result->getInt("hint_level");
-        message["request_id"] = message_result->getString("request_id");
-        message["user_content"] = message_result->getString("user_content");
-        message["assistant_content"] = message_result->getString("assistant_content");
-        message["model"] = message_result->getString("model");
-        message["provider"] = message_result->getString("provider");
-        message["finish_reason"] = message_result->getString("finish_reason");
-        message["prompt_tokens"] = message_result->getInt("prompt_tokens");
-        message["completion_tokens"] = message_result->getInt("completion_tokens");
-        message["total_tokens"] = message_result->getInt("total_tokens");
-        message["latency_ms"] = message_result->getInt("latency_ms");
-        message["knowledge_points_text"] = message_result->getString("knowledge_points_text");
-        message["sources_json"] =
-            message_result->isNull("sources_json") ? "" : message_result->getString("sources_json");
-        message["safety_flags_json"] =
-            message_result->isNull("safety_flags_json") ? "" : message_result->getString("safety_flags_json");
-        message["error_type"] = message_result->getString("error_type");
-        if (message_result->isNull("confidence")) {
-            message["confidence"] = nullptr;
+        message["message_id"] = record.message_id;
+        message["round_no"] = record.round_no;
+        message["hint_level"] = record.hint_level;
+        message["request_id"] = record.request_id;
+        message["user_content"] = record.user_content;
+        message["assistant_content"] = record.assistant_content;
+        message["model"] = record.model;
+        message["provider"] = record.provider;
+        message["finish_reason"] = record.finish_reason;
+        message["prompt_tokens"] = record.prompt_tokens;
+        message["completion_tokens"] = record.completion_tokens;
+        message["total_tokens"] = record.total_tokens;
+        message["latency_ms"] = record.latency_ms;
+        message["knowledge_points_text"] = record.knowledge_points_text;
+        message["sources_json"] = record.sources_json;
+        message["safety_flags_json"] = record.safety_flags_json;
+        message["error_type"] = record.error_type;
+        if (record.confidence) {
+            message["confidence"] = *record.confidence;
         } else {
-            message["confidence"] = static_cast<double>(message_result->getDouble("confidence"));
+            message["confidence"] = nullptr;
         }
-        message["created_at"] = message_result->getInt64("created_at");
+        message["created_at"] = record.created_at;
         messages.push_back(std::move(message));
     }
 
     crow::json::wvalue body;
-    body["conversation"] = std::move(conversation);
+    body["conversation"] = make_ai_conversation_json(detail->conversation);
     body["messages"] = std::move(messages);
     return body;
 }
@@ -968,7 +819,9 @@ void register_routes(crow::Crow<>& app) {
                 return json_error(400, "X-User-Id header is required");
             }
 
-            auto body = load_ai_submission_json(*user_id, submission_id);
+            SubmissionRepository repository;
+            auto body = make_ai_submission_json(
+                repository.find_ai_submission_for_user(*user_id, submission_id));
             if (!body) {
                 return json_error(404, "submission not found or not accessible");
             }
@@ -985,7 +838,11 @@ void register_routes(crow::Crow<>& app) {
             }
 
             try {
-                return crow::response{200, load_ai_problem_status_json(user_id, problem_id)};
+                SubmissionRepository repository;
+                return crow::response{
+                    200,
+                    make_ai_problem_status_json(
+                        repository.find_ai_problem_status(user_id, problem_id))};
             } catch (const std::exception& ex) {
                 return json_error(400, ex.what());
             }
@@ -1016,9 +873,13 @@ void register_routes(crow::Crow<>& app) {
                     problem_id = std::stoll(problem_id_param);
                 }
 
+                ConversationRepository repository;
                 return crow::response{
                     200,
-                    load_ai_conversation_list_json(user_id, problem_id, limit)};
+                    make_ai_conversation_list_json(
+                        user_id,
+                        problem_id,
+                        repository.list_for_user(user_id, problem_id, limit))};
             } catch (const std::exception& ex) {
                 return json_error(400, ex.what());
             }
@@ -1036,7 +897,9 @@ void register_routes(crow::Crow<>& app) {
                 return json_error(400, "X-User-Id header is required");
             }
 
-            auto body = load_ai_conversation_detail_json(*user_id, conversation_id);
+            ConversationRepository repository;
+            auto body = make_ai_conversation_detail_json(
+                repository.find_for_user(*user_id, conversation_id));
             if (!body) {
                 return json_error(404, "conversation not found or not accessible");
             }
@@ -1728,8 +1591,8 @@ void register_routes(crow::Crow<>& app) {
             request.description_markdown = json["description_markdown"].s();
             request.start_at = json["start_at"].i();
             request.end_at = json["end_at"].i();
-            const MySqlClient mysql_client;
-            const auto created_by = find_user_id_by_username(mysql_client, admin->username);
+            AuthService auth_service;
+            const auto created_by = auth_service.find_user_id(admin->username);
             if (!created_by) {
                 return json_error(400, "admin user not found");
             }

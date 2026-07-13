@@ -1,6 +1,6 @@
 #include "common/path_utils.h"
 #include "common/object_storage_client.h"
-#include "services/oj_server/mysql_client.h"
+#include "services/oj_server/data/mysql_client.h"
 
 #include <crow/json.h>
 

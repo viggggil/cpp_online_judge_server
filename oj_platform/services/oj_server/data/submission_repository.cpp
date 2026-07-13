@@ -1,7 +1,7 @@
-#include "services/oj_server/submission_repository.h"
+#include "services/oj_server/data/submission_repository.h"
 
 #include "common/platform_config.h"
-#include "services/oj_server/redis_client.h"
+#include "services/oj_server/data/redis_client.h"
 
 #include <cppconn/prepared_statement.h>
 #include <cppconn/resultset.h>
@@ -786,6 +786,94 @@ SubmissionRepository::list_problem_statuses_for_user_in_assignment(
     statement->setInt64(1, *user_id);
     statement->setInt64(2, assignment_id);
     return collect_problem_statuses(*statement);
+}
+
+std::optional<AiSubmissionContext> SubmissionRepository::find_ai_submission_for_user(
+    std::int64_t user_id,
+    const std::string& submission_id) const {
+    auto connection = mysql_client_.create_connection();
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "SELECT "
+            "submission_id, user_id, problem_id, language, source_code, "
+            "final_status, compile_stderr, system_message, total_time_used_ms, "
+            "peak_memory_used_kb, created_at "
+            "FROM submissions "
+            "WHERE submission_id = ? AND user_id = ?")
+    };
+    statement->setString(1, submission_id);
+    statement->setInt64(2, user_id);
+
+    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+    if (!result->next()) {
+        return std::nullopt;
+    }
+
+    AiSubmissionContext context;
+    context.submission_id = result->getString("submission_id");
+    context.problem_id = result->getInt64("problem_id");
+    context.owner_user_id = result->getInt64("user_id");
+    context.language = result->getString("language");
+    context.source_code = result->getString("source_code");
+    context.judge_status = result->getString("final_status");
+    context.compiler_output = result->getString("compile_stderr");
+    context.runtime_stderr = result->getString("system_message");
+    context.execution_time_ms = result->getInt("total_time_used_ms");
+    context.memory_usage_kb = result->getInt("peak_memory_used_kb");
+    context.submitted_at = result->getInt64("created_at");
+    return context;
+}
+
+AiProblemStatus SubmissionRepository::find_ai_problem_status(
+    std::int64_t user_id,
+    std::int64_t problem_id) const {
+    auto connection = mysql_client_.create_connection();
+    auto statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "SELECT "
+            "COUNT(*) AS submission_count, "
+            "MAX(CASE WHEN accepted = 1 THEN 1 ELSE 0 END) AS accepted, "
+            "MAX(created_at) AS last_submitted_at "
+            "FROM submissions "
+            "WHERE user_id = ? AND problem_id = ?")
+    };
+    statement->setInt64(1, user_id);
+    statement->setInt64(2, problem_id);
+
+    auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+
+    AiProblemStatus status;
+    status.user_id = user_id;
+    status.problem_id = problem_id;
+
+    if (result->next()) {
+        status.submission_count = result->getInt64("submission_count");
+        status.accepted = result->getBoolean("accepted");
+        status.last_submitted_at =
+            result->isNull("last_submitted_at") ? 0 : result->getInt64("last_submitted_at");
+    }
+
+    if (status.submission_count <= 0) {
+        return status;
+    }
+
+    auto last_statement = std::unique_ptr<sql::PreparedStatement>{
+        connection->prepareStatement(
+            "SELECT final_status "
+            "FROM submissions "
+            "WHERE user_id = ? AND problem_id = ? "
+            "ORDER BY created_at DESC, id DESC "
+            "LIMIT 1")
+    };
+    last_statement->setInt64(1, user_id);
+    last_statement->setInt64(2, problem_id);
+
+    auto last_result = std::unique_ptr<sql::ResultSet>{last_statement->executeQuery()};
+    if (last_result->next()) {
+        status.last_status = last_result->getString("final_status");
+    }
+
+    return status;
 }
 
 

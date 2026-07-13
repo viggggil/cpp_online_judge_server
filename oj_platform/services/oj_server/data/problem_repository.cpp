@@ -1,4 +1,4 @@
-#include "services/oj_server/problem_repository.h"
+#include "services/oj_server/data/problem_repository.h"
 
 #include "common/object_storage_client.h"
 

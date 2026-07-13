@@ -50,17 +50,18 @@ target_include_directories(oj_judge_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(oj_judge_core PUBLIC Crow::Crow oj_object_storage)
 
 add_executable(oj_server
-    services/oj_server/main.cpp
-    services/oj_server/routes.cpp
-    services/oj_server/auth_service.cpp
-    services/oj_server/judge_service.cpp
-    services/oj_server/submission_repository.cpp
-    services/oj_server/problem_repository.cpp
-    services/oj_server/mysql_client.cpp
-    services/oj_server/redis_client.cpp
-    services/oj_server/problem_importer.cpp
-    services/oj_server/assignment_repository.cpp
-    services/oj_server/assignment_leaderboard_repository.cpp
+    services/oj_server/server/main.cpp
+    services/oj_server/server/routes.cpp
+    services/oj_server/biz/auth_service.cpp
+    services/oj_server/biz/judge_service.cpp
+    services/oj_server/data/submission_repository.cpp
+    services/oj_server/data/conversation_repository.cpp
+    services/oj_server/data/problem_repository.cpp
+    services/oj_server/data/mysql_client.cpp
+    services/oj_server/data/redis_client.cpp
+    services/oj_server/biz/problem_importer.cpp
+    services/oj_server/data/assignment_repository.cpp
+    services/oj_server/data/assignment_leaderboard_repository.cpp
     common/rabbitmq_client.cpp
 
 )
@@ -80,10 +81,10 @@ add_executable(judge_dispatcher
     services/judge_dispatcher/main.cpp
     services/judge_dispatcher/dispatcher_utils.cpp
     services/judge_dispatcher/worker_client.cpp
-    services/oj_server/problem_repository.cpp
-    services/oj_server/submission_repository.cpp
-    services/oj_server/mysql_client.cpp
-    services/oj_server/redis_client.cpp
+    services/oj_server/data/problem_repository.cpp
+    services/oj_server/data/submission_repository.cpp
+    services/oj_server/data/mysql_client.cpp
+    services/oj_server/data/redis_client.cpp
     common/rabbitmq_client.cpp
 )
 
@@ -93,7 +94,7 @@ target_link_libraries(judge_dispatcher PRIVATE Crow::Crow oj_judge_core oj_objec
 add_executable(problem_migrator
     tools/problem_migrator.cpp
     common/path_utils.cpp
-    services/oj_server/mysql_client.cpp
+    services/oj_server/data/mysql_client.cpp
 )
 
 target_include_directories(problem_migrator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MYSQLCPP_INCLUDE_DIR})
@@ -171,4 +172,3 @@ if(OJ_PLATFORM_BUILD_TESTS)
     PROPERTIES TIMEOUT 90
   )
 endif()
-
