@@ -2,7 +2,9 @@
 
 #include <cppconn/prepared_statement.h>
 #include <cppconn/resultset.h>
+#include <cppconn/statement.h>
 
+#include <chrono>
 #include <memory>
 #include <utility>
 
@@ -63,6 +65,26 @@ ConversationRepository::ConversationRepository()
 
 ConversationRepository::ConversationRepository(MySqlClient mysql_client)
     : mysql_client_(std::move(mysql_client)) {}
+
+namespace {
+
+std::int64_t unix_now() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
+std::int64_t last_insert_id(sql::Connection& connection) {
+    auto statement = std::unique_ptr<sql::Statement>{connection.createStatement()};
+    auto result = std::unique_ptr<sql::ResultSet>{
+        statement->executeQuery("SELECT LAST_INSERT_ID() AS id")};
+    if (!result->next()) {
+        throw std::runtime_error("failed to read last insert id");
+    }
+    return result->getInt64("id");
+}
+
+} // namespace
 
 std::vector<AiConversationSummary> ConversationRepository::list_for_user(
     std::int64_t user_id,
@@ -146,6 +168,99 @@ std::optional<AiConversationDetail> ConversationRepository::find_for_user(
     }
 
     return detail;
+}
+
+StoredConversationMessage ConversationRepository::create_conversation_with_first_message(
+    const CreateConversationWithMessageRequest& request) const {
+    auto connection = mysql_client_.create_connection();
+    const auto now = unix_now();
+
+    try {
+        connection->setAutoCommit(false);
+
+        auto conversation_statement = std::unique_ptr<sql::PreparedStatement>{
+            connection->prepareStatement(
+                "INSERT INTO ai_conversation "
+                "(conversation_id, user_id, problem_id, submission_db_id, submission_id, "
+                "title, hint_level, round_count, status, last_message_at, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        };
+        conversation_statement->setString(1, request.conversation_id);
+        conversation_statement->setInt64(2, request.user_id);
+        conversation_statement->setInt64(3, request.problem_id);
+        if (request.submission_db_id) {
+            conversation_statement->setInt64(4, *request.submission_db_id);
+        } else {
+            conversation_statement->setNull(4, sql::DataType::BIGINT);
+        }
+        if (request.submission_id) {
+            conversation_statement->setString(5, *request.submission_id);
+        } else {
+            conversation_statement->setNull(5, sql::DataType::VARCHAR);
+        }
+        conversation_statement->setString(6, request.title);
+        conversation_statement->setInt(7, request.hint_level);
+        conversation_statement->setInt(8, 1);
+        conversation_statement->setString(9, "active");
+        conversation_statement->setInt64(10, now);
+        conversation_statement->setInt64(11, now);
+        conversation_statement->setInt64(12, now);
+        conversation_statement->executeUpdate();
+
+        const auto conversation_db_id = last_insert_id(*connection);
+
+        auto message_statement = std::unique_ptr<sql::PreparedStatement>{
+            connection->prepareStatement(
+                "INSERT INTO ai_message "
+                "(message_id, conversation_db_id, round_no, hint_level, request_id, "
+                "user_content, assistant_content, model, provider, finish_reason, "
+                "prompt_tokens, completion_tokens, total_tokens, latency_ms, "
+                "knowledge_points_text, sources_json, safety_flags_json, error_type, "
+                "confidence, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        };
+        message_statement->setString(1, request.message_id);
+        message_statement->setInt64(2, conversation_db_id);
+        message_statement->setInt(3, 1);
+        message_statement->setInt(4, request.hint_level);
+        message_statement->setString(5, request.request_id);
+        message_statement->setString(6, request.user_content);
+        message_statement->setString(7, request.assistant_content);
+        message_statement->setString(8, request.model);
+        message_statement->setString(9, request.provider);
+        message_statement->setString(10, request.finish_reason);
+        message_statement->setInt(11, request.prompt_tokens);
+        message_statement->setInt(12, request.completion_tokens);
+        message_statement->setInt(13, request.total_tokens);
+        message_statement->setInt(14, request.latency_ms);
+        message_statement->setString(15, request.knowledge_points_text);
+        message_statement->setString(16, request.sources_json);
+        message_statement->setString(17, request.safety_flags_json);
+        message_statement->setString(18, request.error_type);
+        if (request.confidence) {
+            message_statement->setDouble(19, *request.confidence);
+        } else {
+            message_statement->setNull(19, sql::DataType::DOUBLE);
+        }
+        message_statement->setInt64(20, now);
+        message_statement->executeUpdate();
+
+        connection->commit();
+        connection->setAutoCommit(true);
+    } catch (...) {
+        try {
+            connection->rollback();
+            connection->setAutoCommit(true);
+        } catch (...) {
+        }
+        throw;
+    }
+
+    return StoredConversationMessage{
+        request.conversation_id,
+        request.message_id,
+        1,
+    };
 }
 
 } // namespace oj::server

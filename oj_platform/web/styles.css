@@ -639,6 +639,45 @@ body {
   word-break: break-word;
 }
 
+.monitor-check-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.monitor-check-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  color: #374151;
+}
+
+.monitor-check-item.is-ok {
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.monitor-check-item.is-degraded {
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.monitor-check-item.is-down {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.monitor-check-item strong {
+  font-size: 13px;
+}
+
 .leaderboard-score,
 .leaderboard-penalty {
   min-width: 96px;

@@ -17,6 +17,7 @@ struct StoredSubmission {
 };
 
 struct AiSubmissionContext {
+    std::int64_t submission_db_id{0};
     std::string submission_id;
     std::int64_t problem_id{0};
     std::int64_t owner_user_id{0};

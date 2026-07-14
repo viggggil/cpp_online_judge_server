@@ -22,8 +22,45 @@ class HealthResponse(BaseModel):
     oj_server_configured: bool
 
 
+class ReadyResponse(BaseModel):
+    status: str
+    checks: dict[str, str]
+
+
 def _has_env(name: str) -> bool:
     return bool(os.getenv(name, "").strip())
+
+
+def _check_config() -> str:
+    required = [
+        "OPENROUTER_API_KEY",
+        "CHAT_MODEL",
+        "OJ_SERVER_BASE_URL",
+    ]
+    return "ok" if all(_has_env(name) for name in required) else "missing"
+
+
+def _check_chroma() -> str:
+    persist_dir = Path(os.getenv("CHROMA_PERSIST_DIR", PROJECT_ROOT / "data" / "chroma"))
+    if not persist_dir.is_absolute():
+        persist_dir = PROJECT_ROOT / persist_dir
+    return "ok" if persist_dir.exists() else "not_initialized"
+
+
+def _check_embedding() -> str:
+    return "configured" if _has_env("EMBEDDING_MODEL") else "missing"
+
+
+def _check_oj_client() -> str:
+    return "configured" if _has_env("OJ_SERVER_BASE_URL") else "missing"
+
+
+def _check_llm_client() -> str:
+    return (
+        "configured"
+        if _has_env("OPENROUTER_API_KEY") and _has_env("CHAT_MODEL")
+        else "missing"
+    )
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -46,3 +83,23 @@ async def health_check() -> HealthResponse:
         chat_model_configured=chat_model_configured,
         oj_server_configured=oj_server_configured,
     )
+
+
+@router.get("/ready", response_model=ReadyResponse)
+async def readiness_check() -> ReadyResponse:
+    checks = {
+        "config": _check_config(),
+        "vector_store": _check_chroma(),
+        "embedding": _check_embedding(),
+        "oj_client": _check_oj_client(),
+        "llm_client": _check_llm_client(),
+    }
+
+    ready_values = {"ok", "configured"}
+    status = (
+        "ready"
+        if all(value in ready_values for value in checks.values())
+        else "degraded"
+    )
+
+    return ReadyResponse(status=status, checks=checks)

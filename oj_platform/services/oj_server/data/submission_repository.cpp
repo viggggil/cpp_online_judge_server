@@ -795,7 +795,7 @@ std::optional<AiSubmissionContext> SubmissionRepository::find_ai_submission_for_
     auto statement = std::unique_ptr<sql::PreparedStatement>{
         connection->prepareStatement(
             "SELECT "
-            "submission_id, user_id, problem_id, language, source_code, "
+            "id, submission_id, user_id, problem_id, language, source_code, "
             "final_status, compile_stderr, system_message, total_time_used_ms, "
             "peak_memory_used_kb, created_at "
             "FROM submissions "
@@ -810,6 +810,7 @@ std::optional<AiSubmissionContext> SubmissionRepository::find_ai_submission_for_
     }
 
     AiSubmissionContext context;
+    context.submission_db_id = result->getInt64("id");
     context.submission_id = result->getString("submission_id");
     context.problem_id = result->getInt64("problem_id");
     context.owner_user_id = result->getInt64("user_id");

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"sort"
 	"sync"
@@ -17,6 +19,16 @@ type BasicServiceStatus struct {
 	LatencyMS int64  `json:"latency_ms"`
 	Detail    string `json:"detail,omitempty"`
 	Error     string `json:"error,omitempty"`
+}
+
+type AgentServiceStatus struct {
+	Name      string            `json:"name"`
+	Alive     bool              `json:"alive"`
+	Status    string            `json:"status"`
+	LatencyMS int64             `json:"latency_ms"`
+	Detail    string            `json:"detail,omitempty"`
+	Error     string            `json:"error,omitempty"`
+	Checks    map[string]string `json:"checks,omitempty"`
 }
 
 type WorkersSummary struct {
@@ -36,6 +48,7 @@ type MonitorSummary struct {
 	MySQL     BasicServiceStatus `json:"mysql"`
 	RabbitMQ  BasicServiceStatus `json:"rabbitmq"`
 	MinIO     BasicServiceStatus `json:"minio"`
+	Agent     AgentServiceStatus `json:"agent_service"`
 }
 
 var mysqlInitMu sync.Mutex
@@ -230,18 +243,102 @@ func checkHTTPHealth(ctx context.Context, name string, url string) BasicServiceS
 	}
 }
 
+func checkAgentServiceReady(ctx context.Context, cfg Config) AgentServiceStatus {
+	start := time.Now()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.AgentReadyURL, nil)
+	if err != nil {
+		return AgentServiceStatus{
+			Name:      "agent-service",
+			Alive:     false,
+			Status:    "down",
+			LatencyMS: 0,
+			Error:     err.Error(),
+		}
+	}
+
+	client := http.Client{
+		Timeout: 3 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	latency := time.Since(start).Milliseconds()
+	if err != nil {
+		return AgentServiceStatus{
+			Name:      "agent-service",
+			Alive:     false,
+			Status:    "down",
+			LatencyMS: latency,
+			Error:     err.Error(),
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return AgentServiceStatus{
+			Name:      "agent-service",
+			Alive:     false,
+			Status:    "bad_status",
+			LatencyMS: latency,
+			Detail:    resp.Status,
+		}
+	}
+
+	var payload struct {
+		Status string            `json:"status"`
+		Checks map[string]string `json:"checks"`
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return AgentServiceStatus{
+			Name:      "agent-service",
+			Alive:     false,
+			Status:    "bad_response",
+			LatencyMS: latency,
+			Error:     err.Error(),
+		}
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return AgentServiceStatus{
+			Name:      "agent-service",
+			Alive:     false,
+			Status:    "bad_response",
+			LatencyMS: latency,
+			Error:     err.Error(),
+		}
+	}
+
+	status := payload.Status
+	if status == "" {
+		status = "unknown"
+	}
+
+	return AgentServiceStatus{
+		Name:      "agent-service",
+		Alive:     true,
+		Status:    status,
+		LatencyMS: latency,
+		Detail:    resp.Status,
+		Checks:    payload.Checks,
+	}
+}
+
 func decideOverallStatus(
 	workers WorkersSummary,
 	redis BasicServiceStatus,
 	mysql BasicServiceStatus,
 	rabbitmq BasicServiceStatus,
 	minio BasicServiceStatus,
+	agent AgentServiceStatus,
 ) string {
 	if !redis.Alive || !mysql.Alive || !rabbitmq.Alive || workers.Alive == 0 {
 		return "down"
 	}
 
-	if workers.Alive < workers.Total || !minio.Alive {
+	if workers.Alive < workers.Total ||
+		!minio.Alive ||
+		!agent.Alive ||
+		(agent.Status != "ready" && agent.Status != "ok") {
 		return "degraded"
 	}
 
@@ -257,8 +354,9 @@ func summaryHandler(cfg Config) gin.HandlerFunc {
 		var mysqlStatus BasicServiceStatus
 		var rabbitmqStatus BasicServiceStatus
 		var minioStatus BasicServiceStatus
+		var agentStatus AgentServiceStatus
 		var wg sync.WaitGroup
-		wg.Add(5)
+		wg.Add(6)
 		go func() {
 			defer wg.Done()
 			workers = buildWorkersSummary(cfg)
@@ -280,6 +378,10 @@ func summaryHandler(cfg Config) gin.HandlerFunc {
 			defer wg.Done()
 			minioStatus = checkHTTPHealth(ctx, "minio", cfg.MinIOHealthURL)
 		}()
+		go func() {
+			defer wg.Done()
+			agentStatus = checkAgentServiceReady(ctx, cfg)
+		}()
 
 		wg.Wait()
 
@@ -289,6 +391,7 @@ func summaryHandler(cfg Config) gin.HandlerFunc {
 			mysqlStatus,
 			rabbitmqStatus,
 			minioStatus,
+			agentStatus,
 		)
 
 		c.JSON(http.StatusOK, MonitorSummary{
@@ -300,6 +403,7 @@ func summaryHandler(cfg Config) gin.HandlerFunc {
 			MySQL:     mysqlStatus,
 			RabbitMQ:  rabbitmqStatus,
 			MinIO:     minioStatus,
+			Agent:     agentStatus,
 		})
 	}
 }

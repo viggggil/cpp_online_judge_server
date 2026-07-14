@@ -22,10 +22,10 @@ function monitorRenderStatus(status) {
 }
 
 function monitorServiceClass(status) {
-  if (status === 'ok') {
+  if (status === 'ok' || status === 'ready' || status === 'configured') {
     return 'is-ok';
   }
-  if (status === 'degraded' || status === 'bad_status') {
+  if (status === 'degraded' || status === 'bad_status' || status === 'not_initialized') {
     return 'is-degraded';
   }
   return 'is-down';
@@ -45,6 +45,48 @@ function monitorRenderServiceCard(service) {
       </div>
       <p class="monitor-status-card-meta">连通性：${service?.alive ? '正常' : '异常'}</p>
       <p class="monitor-status-card-meta">延迟：${monitorEscapeHtml(latency)}</p>
+      <p class="monitor-status-card-detail">${detail}</p>
+    </article>
+  `;
+}
+
+function monitorRenderAgentChecks(checks) {
+  const labels = {
+    config: '配置',
+    vector_store: 'Chroma',
+    embedding: 'Embedding',
+    oj_client: 'OJ Client',
+    llm_client: 'OpenRouter',
+  };
+  const keys = ['config', 'vector_store', 'embedding', 'oj_client', 'llm_client'];
+  return keys.map((key) => {
+    const value = checks?.[key] || 'unknown';
+    return `
+      <li class="monitor-check-item ${monitorServiceClass(value)}">
+        <span>${monitorEscapeHtml(labels[key] || key)}</span>
+        <strong>${monitorEscapeHtml(value)}</strong>
+      </li>
+    `;
+  }).join('');
+}
+
+function monitorRenderAgentCard(agent) {
+  const name = monitorEscapeHtml(agent?.name || 'agent-service');
+  const status = monitorEscapeHtml(agent?.status || 'unknown');
+  const latency = Number.isFinite(agent?.latency_ms) ? `${agent.latency_ms} ms` : '-';
+  const detail = monitorEscapeHtml(agent?.detail || agent?.error || '-');
+
+  return `
+    <article class="monitor-status-card monitor-agent-card ${monitorServiceClass(agent?.status)}">
+      <div class="monitor-status-card-header">
+        <h3>${name}</h3>
+        <span class="monitor-badge">${status}</span>
+      </div>
+      <p class="monitor-status-card-meta">连通性：${agent?.alive ? '正常' : '异常'}</p>
+      <p class="monitor-status-card-meta">延迟：${monitorEscapeHtml(latency)}</p>
+      <ul class="monitor-check-list">
+        ${monitorRenderAgentChecks(agent?.checks || {})}
+      </ul>
       <p class="monitor-status-card-detail">${detail}</p>
     </article>
   `;
@@ -96,6 +138,7 @@ function renderMonitorSummary(summary) {
       ${monitorRenderServiceCard(summary?.redis)}
       ${monitorRenderServiceCard(summary?.rabbitmq)}
       ${monitorRenderServiceCard(summary?.minio)}
+      ${monitorRenderAgentCard(summary?.agent_service)}
     </div>
     <div class="monitor-workers-grid">
       ${workerItems.map((worker) => monitorRenderWorkerCard(worker)).join('')}

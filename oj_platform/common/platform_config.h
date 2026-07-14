@@ -40,6 +40,18 @@ struct AiInternalApiConfig {
     };
 };
 
+struct AgentServiceConfig {
+    const char* base_url{env_or_default("OJ_AGENT_BASE_URL", "http://127.0.0.1:8001")};
+    const char* diagnoses_api_path{env_or_default("OJ_AGENT_DIAGNOSES_API_PATH", "/api/v1/diagnoses")};
+    const char* internal_token{
+        env_or_default(
+            "OJ_INTERNAL_API_TOKEN",
+            env_or_default("INTERNAL_API_TOKEN", ""))
+    };
+    int connect_timeout_ms{env_int_or_default("OJ_AGENT_CONNECT_TIMEOUT_MS", 3000)};
+    int read_timeout_ms{env_int_or_default("OJ_AGENT_READ_TIMEOUT_MS", 60000)};
+};
+
 struct RedisConfig {
     const char* host{env_or_default("OJ_REDIS_HOST", "127.0.0.1")};
     int port{env_int_or_default("OJ_REDIS_PORT", 6379)};

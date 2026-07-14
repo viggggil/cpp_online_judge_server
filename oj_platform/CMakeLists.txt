@@ -52,6 +52,8 @@ target_link_libraries(oj_judge_core PUBLIC Crow::Crow oj_object_storage)
 add_executable(oj_server
     services/oj_server/server/main.cpp
     services/oj_server/server/routes.cpp
+    services/oj_server/biz/agent_client.cpp
+    services/oj_server/biz/ai_assistant_service.cpp
     services/oj_server/biz/auth_service.cpp
     services/oj_server/biz/judge_service.cpp
     services/oj_server/data/submission_repository.cpp

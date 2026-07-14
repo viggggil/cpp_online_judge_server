@@ -4,6 +4,7 @@
 #include "common/platform_config.h"
 #include "services/oj_server/data/assignment_leaderboard_repository.h"
 #include "services/oj_server/data/assignment_repository.h"
+#include "services/oj_server/biz/ai_assistant_service.h"
 #include "services/oj_server/biz/auth_service.h"
 #include "services/oj_server/data/conversation_repository.h"
 #include "services/oj_server/biz/judge_service.h"
@@ -342,6 +343,42 @@ crow::json::wvalue make_ai_conversation_json(const AiConversationSummary& conver
     item["created_at"] = conversation.created_at;
     item["updated_at"] = conversation.updated_at;
     return item;
+}
+
+crow::json::wvalue::list make_string_json_list(const std::vector<std::string>& values) {
+    crow::json::wvalue::list items;
+    for (const auto& value : values) {
+        items.push_back(crow::json::wvalue(value));
+    }
+    return items;
+}
+
+crow::json::wvalue make_assistant_diagnosis_json(
+    const AssistantDiagnosisResult& result) {
+    const auto& diagnosis = result.diagnosis;
+    crow::json::wvalue body;
+    body["conversation_id"] = result.conversation_id;
+    body["message_id"] = result.message_id;
+    body["round_no"] = result.round_no;
+    body["request_id"] = diagnosis.request_id;
+    body["diagnosis_id"] = diagnosis.diagnosis_id;
+    body["user_id"] = diagnosis.user_id;
+    body["problem_id"] = diagnosis.problem_id;
+    body["submission_id"] = diagnosis.submission_id;
+    body["judge_status"] = diagnosis.judge_status;
+    body["hint_level"] = diagnosis.hint_level;
+    body["error_type"] = diagnosis.error_type;
+    body["summary"] = diagnosis.summary;
+    body["analysis"] = diagnosis.analysis;
+    body["evidence"] = make_string_json_list(diagnosis.evidence);
+    body["knowledge_points"] = make_string_json_list(diagnosis.knowledge_points);
+    body["hints"] = make_string_json_list(diagnosis.hints);
+    body["sources"] = crow::json::wvalue::list{};
+    body["confidence"] = diagnosis.confidence;
+    body["model"] = diagnosis.model;
+    body["provider"] = diagnosis.provider;
+    body["generated_at"] = diagnosis.generated_at;
+    return body;
 }
 
 crow::json::wvalue make_ai_conversation_list_json(
@@ -793,6 +830,39 @@ void register_routes(crow::Crow<>& app) {
         body["status"] = "ok";
         return crow::response{body};
     });
+
+    CROW_ROUTE(app, "/api/assistant/diagnoses")
+        .methods(crow::HTTPMethod::POST)([](const crow::request& req) {
+            const auto user = require_user(req);
+            if (!user) {
+                return json_error(401, "please login first");
+            }
+
+            const auto json = crow::json::load(req.body);
+            if (!json ||
+                !json.has("problem_id") ||
+                !json.has("submission_id")) {
+                return json_error(400, "problem_id and submission_id are required");
+            }
+
+            try {
+                AssistantDiagnosisRequest request;
+                request.problem_id = json["problem_id"].i();
+                request.submission_id = json["submission_id"].s();
+                request.hint_level = json.has("hint_level")
+                    ? static_cast<int>(json["hint_level"].i())
+                    : 2;
+                request.question = json.has("question")
+                    ? std::string{json["question"].s()}
+                    : "";
+
+                AiAssistantService service;
+                const auto result = service.diagnose(*user, request);
+                return crow::response{200, make_assistant_diagnosis_json(result)};
+            } catch (const std::exception& ex) {
+                return json_error(400, ex.what());
+            }
+        });
 
     CROW_ROUTE(app, "/api/ai/problems/<int>")
         .methods(crow::HTTPMethod::GET)([](const crow::request& req, std::int64_t problem_id) {
