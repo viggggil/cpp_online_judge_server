@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OJ Agent</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="site-header">
+      <div class="page-header-row">
+        <div>
+          <h1>Agent</h1>
+          <p>选择一次自己的提交，向 AI 辅导助手提问</p>
+        </div>
+        <nav class="top-nav top-nav-primary">
+          <a class="button nav-button nav-button-inactive" href="/">首页</a>
+          <a class="button nav-button nav-button-inactive" href="/problems">题库</a>
+          <a class="button nav-button nav-button-inactive" href="/assignments">作业</a>
+          <a class="button nav-button nav-button-inactive nav-submissions" href="/submissions">提交</a>
+          <a class="button nav-button nav-button-active nav-agent" href="/agent">agent</a>
+          <a class="button nav-button nav-button-inactive nav-create" href="/web/admin-problem-create.html">创建</a>
+          <a class="button nav-button nav-button-inactive nav-monitor" href="/monitor">监控</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-stack">
+      <section class="card agent-panel">
+        <label class="label" for="agent-conversation-select">历史会话</label>
+        <div class="agent-history-controls">
+          <select id="agent-conversation-select" class="input"></select>
+          <button id="agent-load-conversation-btn" class="button secondary" type="button">查看</button>
+        </div>
+
+        <label class="label" for="agent-submission-select">选择提交</label>
+        <select id="agent-submission-select" class="input"></select>
+
+        <label class="label" for="agent-question-input">提问</label>
+        <textarea id="agent-question-input" class="input agent-question-input" rows="5" placeholder="例如：为什么这次提交会超时？"></textarea>
+
+        <div class="agent-controls">
+          <label class="label agent-hint-label" for="agent-hint-level">提示等级</label>
+          <select id="agent-hint-level" class="input agent-hint-select">
+            <option value="1">Level 1</option>
+            <option value="2" selected>Level 2</option>
+            <option value="3">Level 3</option>
+          </select>
+          <button id="agent-submit-btn" class="button" type="button">确认</button>
+        </div>
+
+        <pre id="agent-status" class="notice agent-status"></pre>
+      </section>
+
+      <section id="agent-result-card" class="card agent-result hidden">
+        <div class="agent-result-header">
+          <div>
+            <h2 id="agent-result-title">诊断结果</h2>
+            <p id="agent-result-meta" class="meta"></p>
+          </div>
+        </div>
+        <div id="agent-result-content"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/web/auth.js"></script>
+  <script src="/web/nav.js"></script>
+  <script src="/web/agent.js"></script>
+</body>
+</html>

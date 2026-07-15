@@ -792,6 +792,10 @@ void register_routes(crow::Crow<>& app) {
         return serve_file(resolve_web_path(std::filesystem::path{"web"} / "submission.html"));
     });
 
+    CROW_ROUTE(app, "/agent")([] {
+        return serve_file(resolve_web_path(std::filesystem::path{"web"} / "agent.html"));
+    });
+
     CROW_ROUTE(app, "/assignments")([] {
         return serve_file(resolve_web_path(std::filesystem::path{"web"} / "assignments.html"));
     });
@@ -859,6 +863,78 @@ void register_routes(crow::Crow<>& app) {
                 AiAssistantService service;
                 const auto result = service.diagnose(*user, request);
                 return crow::response{200, make_assistant_diagnosis_json(result)};
+            } catch (const std::exception& ex) {
+                return json_error(400, ex.what());
+            }
+        });
+
+    CROW_ROUTE(app, "/api/assistant/conversations")
+        .methods(crow::HTTPMethod::GET)([](const crow::request& req) {
+            const auto user = require_user(req);
+            if (!user) {
+                return json_error(401, "please login first");
+            }
+
+            try {
+                AuthService auth_service;
+                const auto user_id = auth_service.find_user_id(user->username);
+                if (!user_id) {
+                    return json_error(404, "user not found");
+                }
+
+                int limit = 20;
+                if (const auto limit_param = req.url_params.get("limit");
+                    limit_param != nullptr) {
+                    limit = std::stoi(limit_param);
+                }
+                if (limit <= 0) {
+                    limit = 20;
+                }
+                if (limit > 100) {
+                    limit = 100;
+                }
+
+                std::optional<std::int64_t> problem_id;
+                if (const auto problem_id_param = req.url_params.get("problem_id");
+                    problem_id_param != nullptr && std::string{problem_id_param}.size() > 0) {
+                    problem_id = std::stoll(problem_id_param);
+                }
+
+                ConversationRepository repository;
+                return crow::response{
+                    200,
+                    make_ai_conversation_list_json(
+                        *user_id,
+                        problem_id,
+                        repository.list_for_user(*user_id, problem_id, limit))};
+            } catch (const std::exception& ex) {
+                return json_error(400, ex.what());
+            }
+        });
+
+    CROW_ROUTE(app, "/api/assistant/conversations/<string>")
+        .methods(crow::HTTPMethod::GET)([](const crow::request& req,
+                                           const std::string& conversation_id) {
+            const auto user = require_user(req);
+            if (!user) {
+                return json_error(401, "please login first");
+            }
+
+            try {
+                AuthService auth_service;
+                const auto user_id = auth_service.find_user_id(user->username);
+                if (!user_id) {
+                    return json_error(404, "user not found");
+                }
+
+                ConversationRepository repository;
+                auto body = make_ai_conversation_detail_json(
+                    repository.find_for_user(*user_id, conversation_id));
+                if (!body) {
+                    return json_error(404, "conversation not found or not accessible");
+                }
+                auto response_body = std::move(*body);
+                return crow::response{200, response_body};
             } catch (const std::exception& ex) {
                 return json_error(400, ex.what());
             }

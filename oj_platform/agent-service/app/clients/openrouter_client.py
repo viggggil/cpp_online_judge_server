@@ -30,28 +30,36 @@ class OpenRouterClient:
         async with httpx.AsyncClient(
             timeout=settings.openrouter_read_timeout_seconds
         ) as client:
-            response = await client.post(
-                url,
-                headers={
-                    "Authorization": f"Bearer {settings.openrouter_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": settings.chat_model,
-                    "messages": messages,
-                    "temperature": 0,
-                    "max_tokens": 1200,
-                    "response_format": {
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": response_model.__name__,
-                            "strict": True,
-                            "schema": response_model.model_json_schema(),
+            try:
+                response = await client.post(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {settings.openrouter_api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": settings.chat_model,
+                        "messages": messages,
+                        "temperature": 0,
+                        "max_tokens": 1200,
+                        "response_format": {
+                            "type": "json_schema",
+                            "json_schema": {
+                                "name": response_model.__name__,
+                                "strict": True,
+                                "schema": response_model.model_json_schema(),
+                            },
                         },
                     },
-                },
-            )
-        response.raise_for_status()
+                )
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                response_text = exc.response.text[:1000]
+                raise RuntimeError(
+                    f"OpenRouter returned HTTP {exc.response.status_code}: {response_text}"
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"OpenRouter request failed: {type(exc).__name__}: {exc}") from exc
 
         payload = response.json()
         choice = payload["choices"][0]

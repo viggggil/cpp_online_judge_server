@@ -82,6 +82,8 @@ services:
         condition: service_started
       go_monitor:
         condition: service_started
+      agent-service:
+        condition: service_healthy
     environment:
       TZ: Asia/Shanghai
       OJ_SERVER_PORT: 18080
@@ -103,12 +105,50 @@ services:
       OJ_ADMIN_REGISTER_CODE: ${OJ_ADMIN_REGISTER_CODE}
       OJ_MONITOR_HOST: go_monitor
       OJ_MONITOR_PORT: 18090
+      OJ_AGENT_BASE_URL: http://agent-service:8001
+      OJ_INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      OJ_AGENT_READ_TIMEOUT_MS: ${OJ_AGENT_READ_TIMEOUT_MS:-180000}
       OJ_OBJECT_STORAGE_ENDPOINT: http://minio:9000
       OJ_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
       OJ_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       OJ_OBJECT_STORAGE_BUCKET: oj-testdata
     ports:
       - "8080:18080"
+
+  agent-service:
+    build:
+      context: ..
+      dockerfile: oj_platform/Dockerfile
+      target: agent_service
+      args:
+        AGENT_PYTHON_IMAGE: ${AGENT_PYTHON_IMAGE:-python:3.11-slim}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-600}
+        PIP_RETRIES: ${PIP_RETRIES:-5}
+    container_name: oj_platform_agent_service
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      APP_ENV: production
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8001
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      OJ_SERVER_BASE_URL: http://oj_server:18080
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      CHAT_MODEL: ${CHAT_MODEL:-deepseek/deepseek-v4-flash}
+      OPENROUTER_BASE_URL: https://openrouter.ai/api/v1
+      OPENROUTER_READ_TIMEOUT_SECONDS: ${OPENROUTER_READ_TIMEOUT_SECONDS:-180}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+      CHROMA_PERSIST_DIR: /app/data/chroma
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2).read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
   judge_dispatcher:
     build:

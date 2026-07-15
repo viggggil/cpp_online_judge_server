@@ -56,6 +56,12 @@
       });
     });
 
+    document.querySelectorAll('.nav-agent').forEach((element) => {
+      element.addEventListener('click', (event) => {
+        handleProtectedNavigation(event, '使用 agent 前请先登录');
+      });
+    });
+
     document.querySelectorAll('.nav-create').forEach((element) => {
       element.addEventListener('click', handleCreateNavigation);
     });

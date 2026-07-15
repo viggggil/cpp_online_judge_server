@@ -63,6 +63,77 @@ body {
 .status-bad { color: #dc2626; font-weight: 700; }
 .hidden { display: none; }
 
+.agent-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.agent-question-input {
+  min-height: 120px;
+  resize: vertical;
+  font: inherit;
+}
+
+.agent-history-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.agent-controls {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.agent-hint-label {
+  margin: 0;
+}
+
+.agent-hint-select {
+  width: auto;
+  min-width: 140px;
+}
+
+.agent-status {
+  margin: 6px 0 0;
+}
+
+.agent-result-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.agent-result-header h2 {
+  margin-top: 0;
+}
+
+.agent-result-section {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 14px;
+  margin-top: 14px;
+}
+
+.agent-result-section h3 {
+  margin: 0 0 8px;
+}
+
+.agent-result-section p {
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+@media (max-width: 640px) {
+  .agent-history-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
 .case-summary-row {
   display: flex;
   justify-content: space-between;

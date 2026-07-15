@@ -1,3 +1,5 @@
+ARG AGENT_PYTHON_IMAGE=python:3.11-slim
+
 FROM ubuntu:24.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -87,3 +89,32 @@ FROM runtime-base AS judge_worker
 COPY --from=builder /src/build/judge_worker /app/bin/judge_worker
 EXPOSE 18081
 CMD ["/app/bin/judge_worker"]
+
+FROM ${AGENT_PYTHON_IMAGE} AS agent_service
+
+ARG PIP_INDEX_URL
+ARG PIP_TRUSTED_HOST
+ARG PIP_DEFAULT_TIMEOUT=600
+ARG PIP_RETRIES=5
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=${PIP_DEFAULT_TIMEOUT} \
+    PIP_RETRIES=${PIP_RETRIES}
+
+WORKDIR /app
+
+RUN if [ -n "$PIP_INDEX_URL" ]; then pip config set global.index-url "$PIP_INDEX_URL"; fi \
+    && if [ -n "$PIP_TRUSTED_HOST" ]; then pip config set global.trusted-host "$PIP_TRUSTED_HOST"; fi
+
+COPY oj_platform/agent-service/pyproject.toml oj_platform/agent-service/uv.lock oj_platform/agent-service/README.md oj_platform/agent-service/main.py ./
+RUN python -c 'import tomllib; deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]; open("/tmp/agent-service-requirements.txt", "w").write("\n".join(deps) + "\n")' \
+    && python -m pip install --no-cache-dir --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" -r /tmp/agent-service-requirements.txt
+
+COPY oj_platform/agent-service/app ./app
+COPY oj_platform/agent-service/knowledge ./knowledge
+COPY oj_platform/agent-service/data ./data
+
+EXPOSE 8001
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
