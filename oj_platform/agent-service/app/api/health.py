@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+import chromadb
+from chromadb.config import Settings as ChromaSettings
 from dotenv import load_dotenv
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -44,11 +46,28 @@ def _check_chroma() -> str:
     persist_dir = Path(os.getenv("CHROMA_PERSIST_DIR", PROJECT_ROOT / "data" / "chroma"))
     if not persist_dir.is_absolute():
         persist_dir = PROJECT_ROOT / persist_dir
-    return "ok" if persist_dir.exists() else "not_initialized"
+    if not persist_dir.exists():
+        return "not_initialized"
+
+    try:
+        client = chromadb.PersistentClient(
+            path=str(persist_dir),
+            settings=ChromaSettings(anonymized_telemetry=False),
+        )
+        collection = client.get_collection(
+            os.getenv("CHROMA_COLLECTION", "oj_agent_knowledge")
+        )
+        return "ok" if collection.count() > 0 else "empty"
+    except Exception:
+        return "not_initialized"
 
 
 def _check_embedding() -> str:
-    return "configured" if _has_env("EMBEDDING_MODEL") else "missing"
+    return (
+        "configured"
+        if _has_env("EMBEDDING_MODEL") and _has_env("EMBEDDING_CACHE_DIR")
+        else "missing"
+    )
 
 
 def _check_oj_client() -> str:

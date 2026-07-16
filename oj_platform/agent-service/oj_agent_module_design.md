@@ -299,8 +299,8 @@ MVP 建议目标：
 | Structured Output | JSON Schema | OpenRouter 原生能力 |
 | RAG | LangChain | Document、Splitter、Retriever |
 | 向量库 | Chroma | 本地持久化、适合 MVP |
-| Embedding | BAAI/bge-m3 | 中英文和技术文本兼容 |
-| Embedding 运行 | sentence-transformers | 本地 CPU 可运行 |
+| Embedding | BAAI/bge-small-zh-v1.5 | 中文友好、体积较小、适合当前题解知识库 |
+| Embedding 运行 | fastembed | ONNX Runtime 本地推理，避免引入 PyTorch/CUDA 大依赖 |
 | 工作流 | 普通 Python Service | 可控、易调试 |
 | 后续编排 | LangGraph | 条件节点、状态和恢复 |
 | 会话 | 内存，后续 Redis | MVP 先简单 |
@@ -310,6 +310,21 @@ MVP 建议目标：
 | 后续部署 | Docker Compose | 服务统一部署 |
 
 ## 7.1 固定决策
+
+Embedding 模型第一版选择 `BAAI/bge-small-zh-v1.5`，通过 `fastembed` 在本地
+CPU 上运行。
+
+选择原因：
+
+- 当前知识库主体是中文题解、中文算法说明和少量 C++ 代码片段，中文检索质量比纯英文
+  `all-MiniLM-L6-v2` 更匹配；
+- 相比 `BAAI/bge-m3`，`bge-small-zh-v1.5` 体积和启动成本更低，更适合 Docker
+  Compose 本地部署和 MVP 阶段快速重建索引；
+- 相比 `sentence-transformers`，`fastembed` 基于 ONNX Runtime，依赖更轻，不会默认
+  拉取 PyTorch 和 CUDA 相关大包；
+- 512 维向量对当前几十到几千篇 Markdown 文档已经足够，Chroma 本地存储和查询成本低；
+- 后续如果知识库扩大到多语言题面、英文题解或更复杂语义检索，可以平滑切换到
+  `BAAI/bge-m3` 或 `jinaai/jina-embeddings-v2-base-zh`，只需要重建 Chroma 索引。
 
 模型调用采用：
 
@@ -651,45 +666,67 @@ class SourceReference(BaseModel):
 
 ## 13.1 知识库
 
+MVP 阶段使用 `agent-service/knowledge/` 下的 Markdown 文件作为知识库源数据，
+由 Agent Service 的 loader 切分后写入 Chroma。MySQL 仍负责题目、标签、提交、
+对话和消息等业务数据；当前不新增 `problem_editorial` 表，题解先以 Markdown 形式
+维护，便于版本管理和重建向量索引。
+
+当前目录：
+
 ```text
 knowledge/
 ├── algorithms/
-│   ├── arrays.md
-│   ├── hash_table.md
-│   ├── binary_search.md
-│   ├── two_pointers.md
-│   ├── recursion.md
-│   ├── greedy.md
-│   ├── dynamic_programming.md
-│   └── graph_search.md
+│   ├── bracket-normalization-hashing.md
+│   ├── complexity-analysis.md
+│   ├── dsu-on-tree.md
+│   ├── greedy-linked-list-simulation.md
+│   ├── hash-table-two-sum.md
+│   ├── merge-sorted-arrays.md
+│   ├── scc-reachability.md
+│   └── sliding-window.md
 ├── cpp_errors/
-│   ├── missing_semicolon.md
-│   ├── undefined_identifier.md
-│   ├── type_mismatch.md
-│   ├── array_out_of_bounds.md
-│   ├── integer_overflow.md
-│   └── stack_overflow.md
-├── complexity/
-│   ├── time_complexity.md
-│   ├── space_complexity.md
-│   ├── tle_patterns.md
-│   └── io_optimization.md
+│   └── ...
 └── problem_hints/
-    ├── problem_1000.md
-    └── problem_1001.md
+    ├── problem-1000-a-plus-b.md
+    ├── problem-1001-reachability-from-capital.md
+    ├── problem-1002-lomsat-gelral.md
+    ├── problem-1003-two-teams.md
+    └── problem-1007-brackets.md
 ```
+
+当前 MySQL 中已有题目均已覆盖算法标签：
+
+| 题号 | 题目 | Markdown 题解 | 标签状态 |
+|---:|---|---|---|
+| 1000 | a+b problem | 已有 | 已补齐 |
+| 1001 | Reachability from the Capital | 已有 | 已补齐 |
+| 1002 | Lomsat gelral | 已有 | 已补齐 |
+| 1003 | Two Teams | 已有 | 已补齐 |
+| 1007 | Brackets | 已有 | 已补齐 |
+
+外部资料使用原则：
+
+- OI Wiki、Codeforces 等页面只作为算法概念、题目来源和术语参考；
+- 仓库内题解必须是项目自己的原创讲解或原创归纳；
+- 不复制外部题解正文，不把大段网页内容直接写入知识库；
+- 通过 frontmatter 的 `external_sources` 保存来源链接，便于后续回答展示溯源。
 
 ## 13.2 文档元数据
 
 ```yaml
 ---
-document_id: cpp_missing_semicolon
-title: C++ 缺少分号
-document_type: cpp_error
-knowledge_point: syntax
-language: cpp
-difficulty: beginner
-version: 1
+document_id: problem_1001_reachability_from_capital
+title: "1001 Reachability from the Capital 题解"
+category: problem_editorial
+problem_id: 1001
+problem_title: "Reachability from the Capital"
+tags: ["graph", "dfs", "scc", "reachability", "greedy"]
+difficulty: medium
+safe_level: editorial
+source_type: original
+external_sources:
+  - "https://codeforces.com/problemset/problem/999/E"
+  - "https://oi-wiki.org/graph/scc/"
 ---
 ```
 
@@ -697,15 +734,15 @@ Chunk metadata：
 
 ```json
 {
-  "document_id": "cpp_missing_semicolon",
-  "source": "knowledge/cpp_errors/missing_semicolon.md",
-  "title": "C++ 缺少分号",
-  "document_type": "cpp_error",
-  "knowledge_point": "syntax",
-  "language": "cpp",
-  "difficulty": "beginner",
-  "chunk_index": 0,
-  "version": 1
+  "document_id": "problem_1001_reachability_from_capital",
+  "source": "knowledge/problem_hints/problem-1001-reachability-from-capital.md",
+  "title": "1001 Reachability from the Capital 题解",
+  "category": "problem_editorial",
+  "problem_id": 1001,
+  "tags": ["graph", "dfs", "scc", "reachability", "greedy"],
+  "difficulty": "medium",
+  "safe_level": "editorial",
+  "chunk_index": 0
 }
 ```
 
@@ -1299,10 +1336,13 @@ OPENROUTER_READ_TIMEOUT_SECONDS=60
 OPENROUTER_MAX_RETRIES=0
 OPENROUTER_APP_TITLE=OJ Programming Tutor
 
-EMBEDDING_MODEL=BAAI/bge-m3
+EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+EMBEDDING_CACHE_DIR=./data/fastembed
 EMBEDDING_DEVICE=cpu
 KNOWLEDGE_DIR=./knowledge
 CHROMA_PERSIST_DIR=./data/chroma
+CHROMA_COLLECTION=oj_agent_knowledge
+HF_ENDPOINT=https://hf-mirror.com
 RAG_TOP_K=5
 
 DEFAULT_HINT_LEVEL=2

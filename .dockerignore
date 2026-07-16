@@ -17,3 +17,5 @@ oj_platform/*.a
 oj_platform/*.so
 oj_platform/*.so.*
 oj_platform/*.log
+oj_platform/agent-service/data/chroma/
+oj_platform/agent-service/data/fastembed/

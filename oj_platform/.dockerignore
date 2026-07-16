@@ -12,3 +12,5 @@ Makefile
 *.log
 Dockerfile
 docker-compose.yml
+agent-service/data/chroma/
+agent-service/data/fastembed/

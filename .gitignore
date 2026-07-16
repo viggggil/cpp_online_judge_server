@@ -30,3 +30,8 @@ oj_platform/services/go_monitor/go_monitor
 .env
 .venv/
 __pycache__/
+oj_platform/.env
+
+# ==== agent-service generated RAG data ====
+/oj_platform/agent-service/data/chroma/
+/oj_platform/agent-service/data/fastembed/
