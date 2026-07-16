@@ -33,6 +33,7 @@ struct AgentDiagnosisResponse {
     std::vector<std::string> evidence;
     std::vector<std::string> knowledge_points;
     std::vector<std::string> hints;
+    std::vector<AgentSourceReference> sources;
     double confidence{0};
     std::string model;
     std::string provider;

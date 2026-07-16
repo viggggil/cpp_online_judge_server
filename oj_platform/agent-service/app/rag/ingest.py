@@ -147,8 +147,11 @@ def load_knowledge_chunks(
 
 def build_embedding_model(model_name: str, cache_dir: Path) -> TextEmbedding:
     cache_dir.mkdir(parents=True, exist_ok=True)
+    supported_models = TextEmbedding.list_supported_models()
+    if not any(model.get("model") == model_name for model in supported_models):
+        model_name = DEFAULT_EMBEDDING_MODEL
 
-    for model in TextEmbedding.list_supported_models():
+    for model in supported_models:
         if model.get("model") != model_name:
             continue
 
@@ -238,6 +241,11 @@ def ingest_from_env() -> IngestResult:
     )
     collection_name = os.getenv("CHROMA_COLLECTION", DEFAULT_COLLECTION_NAME)
     embedding_model_name = os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+    if not any(
+        model.get("model") == embedding_model_name
+        for model in TextEmbedding.list_supported_models()
+    ):
+        embedding_model_name = DEFAULT_EMBEDDING_MODEL
 
     return rebuild_chroma_collection(
         knowledge_dir=knowledge_dir,

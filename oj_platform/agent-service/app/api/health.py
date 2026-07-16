@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.rag.ingest import DEFAULT_EMBEDDING_CACHE_DIR, DEFAULT_EMBEDDING_MODEL
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -63,11 +65,11 @@ def _check_chroma() -> str:
 
 
 def _check_embedding() -> str:
-    return (
-        "configured"
-        if _has_env("EMBEDDING_MODEL") and _has_env("EMBEDDING_CACHE_DIR")
-        else "missing"
-    )
+    model = os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL).strip()
+    cache_dir = Path(os.getenv("EMBEDDING_CACHE_DIR", DEFAULT_EMBEDDING_CACHE_DIR))
+    if not cache_dir.is_absolute():
+        cache_dir = PROJECT_ROOT / cache_dir
+    return "configured" if model and cache_dir.exists() else "missing"
 
 
 def _check_oj_client() -> str:

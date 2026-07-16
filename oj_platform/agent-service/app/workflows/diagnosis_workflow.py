@@ -7,6 +7,7 @@ from app.schemas.diagnosis import (
     DiagnosisResponse,
     SubmissionDiagnosis,
 )
+from app.rag.retriever import get_knowledge_retriever
 from app.services.prompt_service import PromptService
 from app.services.safety_service import SafetyService
 
@@ -27,7 +28,11 @@ class DiagnosisWorkflow:
         if request.submission.owner_user_id != request.user.user_id:
             raise ValueError("submission does not belong to user")
 
-        messages = self.prompt_service.build_diagnosis_messages(request)
+        retrieved_documents = self._retrieve_knowledge(request)
+        messages = self.prompt_service.build_diagnosis_messages(
+            request,
+            retrieved_documents,
+        )
         result = await self.llm_client.invoke_structured(
             messages=messages,
             response_model=SubmissionDiagnosis,
@@ -49,8 +54,14 @@ class DiagnosisWorkflow:
             knowledge_points=diagnosis.knowledge_points,
             hints=diagnosis.hints,
             confidence=diagnosis.confidence,
-            sources=[],
+            sources=[document.source for document in retrieved_documents],
             model=result.model,
             provider=result.provider,
             generated_at=unix_now(),
         )
+
+    def _retrieve_knowledge(self, request: DiagnosisRequest):
+        try:
+            return get_knowledge_retriever().retrieve(request)
+        except Exception:
+            return []

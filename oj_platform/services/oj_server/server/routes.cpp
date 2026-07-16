@@ -353,6 +353,22 @@ crow::json::wvalue::list make_string_json_list(const std::vector<std::string>& v
     return items;
 }
 
+crow::json::wvalue::list make_source_json_list(
+    const std::vector<AgentSourceReference>& values) {
+    crow::json::wvalue::list items;
+    for (const auto& value : values) {
+        crow::json::wvalue item;
+        item["document_id"] = value.document_id;
+        item["source"] = value.source;
+        item["title"] = value.title;
+        item["knowledge_point"] = value.knowledge_point;
+        item["chunk_index"] = value.chunk_index;
+        item["score"] = value.score;
+        items.push_back(std::move(item));
+    }
+    return items;
+}
+
 crow::json::wvalue make_assistant_diagnosis_json(
     const AssistantDiagnosisResult& result) {
     const auto& diagnosis = result.diagnosis;
@@ -373,7 +389,7 @@ crow::json::wvalue make_assistant_diagnosis_json(
     body["evidence"] = make_string_json_list(diagnosis.evidence);
     body["knowledge_points"] = make_string_json_list(diagnosis.knowledge_points);
     body["hints"] = make_string_json_list(diagnosis.hints);
-    body["sources"] = crow::json::wvalue::list{};
+    body["sources"] = make_source_json_list(diagnosis.sources);
     body["confidence"] = diagnosis.confidence;
     body["model"] = diagnosis.model;
     body["provider"] = diagnosis.provider;

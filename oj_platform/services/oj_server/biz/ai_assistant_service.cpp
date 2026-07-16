@@ -55,6 +55,21 @@ std::string build_assistant_content(const AgentDiagnosisResponse& diagnosis) {
     return out.str();
 }
 
+std::string build_sources_json(const std::vector<AgentSourceReference>& sources) {
+    crow::json::wvalue::list items;
+    for (const auto& source : sources) {
+        crow::json::wvalue item;
+        item["document_id"] = source.document_id;
+        item["source"] = source.source;
+        item["title"] = source.title;
+        item["knowledge_point"] = source.knowledge_point;
+        item["chunk_index"] = source.chunk_index;
+        item["score"] = source.score;
+        items.push_back(std::move(item));
+    }
+    return crow::json::wvalue(std::move(items)).dump();
+}
+
 crow::json::wvalue make_problem_json(const oj::protocol::ProblemDetail& problem) {
     crow::json::wvalue body;
     body["problem_id"] = problem.id;
@@ -167,7 +182,7 @@ AssistantDiagnosisResult AiAssistantService::diagnose(
     create_request.finish_reason = "";
     create_request.latency_ms = latency_ms;
     create_request.knowledge_points_text = join_text(diagnosis.knowledge_points, ",");
-    create_request.sources_json = "[]";
+    create_request.sources_json = build_sources_json(diagnosis.sources);
     create_request.safety_flags_json = "{}";
     create_request.error_type = diagnosis.error_type;
     create_request.confidence = diagnosis.confidence;

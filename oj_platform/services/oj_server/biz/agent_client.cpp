@@ -208,6 +208,27 @@ std::vector<std::string> json_string_list(const crow::json::rvalue& value, const
     return items;
 }
 
+std::vector<AgentSourceReference> json_source_list(
+    const crow::json::rvalue& value,
+    const char* key) {
+    std::vector<AgentSourceReference> items;
+    if (!value.has(key)) {
+        return items;
+    }
+
+    for (const auto& item : value[key]) {
+        AgentSourceReference source;
+        source.document_id = json_string(item, "document_id");
+        source.source = json_string(item, "source");
+        source.title = json_string(item, "title");
+        source.knowledge_point = json_string(item, "knowledge_point");
+        source.chunk_index = json_int(item, "chunk_index");
+        source.score = json_double(item, "score");
+        items.push_back(std::move(source));
+    }
+    return items;
+}
+
 } // namespace
 
 AgentClient::AgentClient()
@@ -263,6 +284,7 @@ AgentDiagnosisResponse AgentClient::create_diagnosis(
     response.evidence = json_string_list(json, "evidence");
     response.knowledge_points = json_string_list(json, "knowledge_points");
     response.hints = json_string_list(json, "hints");
+    response.sources = json_source_list(json, "sources");
     response.confidence = json_double(json, "confidence");
     response.model = json_string(json, "model");
     response.provider = json_string(json, "provider");
