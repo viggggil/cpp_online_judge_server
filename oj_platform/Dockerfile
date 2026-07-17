@@ -94,8 +94,8 @@ FROM ${AGENT_PYTHON_IMAGE} AS agent_service
 
 ARG PIP_INDEX_URL
 ARG PIP_TRUSTED_HOST
-ARG PIP_DEFAULT_TIMEOUT=600
-ARG PIP_RETRIES=5
+ARG PIP_DEFAULT_TIMEOUT=300
+ARG PIP_RETRIES=3
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -109,8 +109,36 @@ RUN if [ -n "$PIP_INDEX_URL" ]; then pip config set global.index-url "$PIP_INDEX
     && if [ -n "$PIP_TRUSTED_HOST" ]; then pip config set global.trusted-host "$PIP_TRUSTED_HOST"; fi
 
 COPY oj_platform/agent-service/pyproject.toml oj_platform/agent-service/uv.lock oj_platform/agent-service/README.md oj_platform/agent-service/main.py ./
-RUN python -c 'import tomllib; deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]; open("/tmp/agent-service-requirements.txt", "w").write("\n".join(deps) + "\n")' \
-    && python -m pip install --no-cache-dir --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" -r /tmp/agent-service-requirements.txt
+COPY oj_platform/agent-service/vendor/wheels ./vendor/wheels
+RUN python - <<'PY'
+import tomllib
+
+deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]
+embedding_deps = [dep for dep in deps if dep.split(">=", 1)[0] == "fastembed"]
+base_deps = [dep for dep in deps if dep not in embedding_deps]
+
+open("/tmp/agent-service-requirements-base.txt", "w").write(
+    "\n".join(base_deps) + "\n"
+)
+open("/tmp/agent-service-requirements-embedding.txt", "w").write(
+    "\n".join(embedding_deps) + "\n"
+)
+PY
+
+RUN echo "Base Python requirements:" \
+    && cat /tmp/agent-service-requirements-base.txt \
+    && if find /app/vendor/wheels -type f -name '*.whl' | grep -q .; then \
+        python -m pip install --no-index --find-links /app/vendor/wheels -r /tmp/agent-service-requirements-base.txt; \
+    else \
+        python -m pip install --no-cache-dir --prefer-binary --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" -r /tmp/agent-service-requirements-base.txt; \
+    fi \
+    && echo "Embedding Python requirements:" \
+    && cat /tmp/agent-service-requirements-embedding.txt \
+    && if find /app/vendor/wheels -type f -name '*.whl' | grep -q .; then \
+        python -m pip install --no-index --find-links /app/vendor/wheels -r /tmp/agent-service-requirements-embedding.txt; \
+    else \
+        python -m pip install --no-cache-dir --prefer-binary --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" -r /tmp/agent-service-requirements-embedding.txt; \
+    fi
 
 COPY oj_platform/agent-service/app ./app
 COPY oj_platform/agent-service/knowledge ./knowledge

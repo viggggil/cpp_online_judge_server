@@ -4,7 +4,9 @@
 #include "services/oj_server/biz/auth_service.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace oj::server {
@@ -25,9 +27,12 @@ struct AssistantDiagnosisResult {
 
 class AiAssistantService {
 public:
+    using ProgressCallback = std::function<void(std::string_view stage, std::string_view message)>;
+
     AssistantDiagnosisResult diagnose(
         const AuthenticatedUser& user,
-        const AssistantDiagnosisRequest& request) const;
+        const AssistantDiagnosisRequest& request,
+        const ProgressCallback& progress = nullptr) const;
 };
 
 } // namespace oj::server

@@ -2,7 +2,7 @@ import time
 from typing import Generic, TypeVar
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core.config import get_settings
 
@@ -41,7 +41,11 @@ class OpenRouterClient:
                         "model": settings.chat_model,
                         "messages": messages,
                         "temperature": 0,
-                        "max_tokens": 1200,
+                        "max_tokens": 2000,
+                        "reasoning": {
+                            "effort": "none",
+                            "exclude": True,
+                        },
                         "response_format": {
                             "type": "json_schema",
                             "json_schema": {
@@ -63,15 +67,33 @@ class OpenRouterClient:
 
         payload = response.json()
         choice = payload["choices"][0]
-        content = choice["message"]["content"]
+        message = choice.get("message") or {}
+        content = message.get("content")
         provider = (
             payload.get("provider")
             or payload.get("provider_name")
             or choice.get("provider")
             or ""
         )
+        if not isinstance(content, str) or not content.strip():
+            finish_reason = choice.get("finish_reason") or ""
+            refusal = message.get("refusal") or ""
+            reasoning_preview = str(message.get("reasoning") or "")[:200]
+            raise RuntimeError(
+                "OpenRouter returned empty assistant content "
+                f"(finish_reason={finish_reason}, refusal={refusal}, "
+                f"reasoning_preview={reasoning_preview})"
+            )
+
+        try:
+            data = response_model.model_validate_json(content)
+        except ValidationError as exc:
+            raise RuntimeError(
+                f"OpenRouter returned invalid structured JSON: {exc}"
+            ) from exc
+
         return StructuredLLMResult(
-            data=response_model.model_validate_json(content),
+            data=data,
             model=payload.get("model") or settings.chat_model,
             provider=str(provider),
         )

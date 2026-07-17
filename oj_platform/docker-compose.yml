@@ -124,8 +124,8 @@ services:
         AGENT_PYTHON_IMAGE: ${AGENT_PYTHON_IMAGE:-python:3.11-slim}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
-        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-600}
-        PIP_RETRIES: ${PIP_RETRIES:-5}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-300}
+        PIP_RETRIES: ${PIP_RETRIES:-3}
     container_name: oj_platform_agent_service
     restart: unless-stopped
     environment:

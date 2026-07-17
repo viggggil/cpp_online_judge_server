@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Any, Callable
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
@@ -19,11 +21,100 @@ from app.rag.ingest import (
 from app.schemas.diagnosis import DiagnosisRequest, SourceReference
 
 
+DEFAULT_GENERAL_MIN_SCORE = 0.56
+DEFAULT_GENERAL_MAX_DOCUMENTS = 2
+
+
 @dataclass(frozen=True)
 class RetrievedDocument:
     content: str
     source: SourceReference
     distance: float
+
+
+def _metadata_problem_id(metadata: dict[str, Any]) -> int | None:
+    value = metadata.get("problem_id")
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _metadata_tags(metadata: dict[str, Any]) -> set[str]:
+    value = metadata.get("tags")
+    if value is None:
+        return set()
+
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            parsed = value.replace(",", " ").split()
+    elif isinstance(value, list):
+        parsed = value
+    else:
+        parsed = []
+
+    return {
+        str(item).strip().lower()
+        for item in parsed
+        if str(item).strip()
+    }
+
+
+def _problem_tags(request: DiagnosisRequest) -> set[str]:
+    return {
+        str(tag).strip().lower()
+        for tag in request.problem.tags
+        if str(tag).strip()
+    }
+
+
+def _is_problem_editorial(metadata: dict[str, Any]) -> bool:
+    category = str(metadata.get("category") or "").strip().lower()
+    safe_level = str(metadata.get("safe_level") or "").strip().lower()
+    source = str(metadata.get("source") or "").strip().lower()
+    return (
+        category == "problem_editorial"
+        or safe_level == "editorial"
+        or "problem_hints/" in source
+    )
+
+
+def _is_same_problem_editorial(
+    metadata: dict[str, Any],
+    request: DiagnosisRequest,
+) -> bool:
+    return (
+        _is_problem_editorial(metadata)
+        and _metadata_problem_id(metadata) == request.problem.problem_id
+    )
+
+
+def _is_relevant_general_document(
+    metadata: dict[str, Any],
+    request: DiagnosisRequest,
+) -> bool:
+    if _is_problem_editorial(metadata):
+        return False
+
+    tags = _problem_tags(request)
+    if not tags:
+        return False
+
+    metadata_tags = _metadata_tags(metadata)
+    if tags.intersection(metadata_tags):
+        return True
+
+    knowledge_point = str(
+        metadata.get("knowledge_point")
+        or metadata.get("category")
+        or metadata.get("title")
+        or ""
+    ).strip().lower()
+    return any(tag and tag in knowledge_point for tag in tags)
 
 
 def build_retrieval_query(request: DiagnosisRequest) -> str:
@@ -61,6 +152,12 @@ class KnowledgeRetriever:
         self.collection_name = collection_name
         self.embedding_model_name = embedding_model_name
         self.top_k = top_k
+        self.general_min_score = float(
+            os.getenv("RAG_GENERAL_MIN_SCORE", str(DEFAULT_GENERAL_MIN_SCORE))
+        )
+        self.general_max_documents = int(
+            os.getenv("RAG_GENERAL_MAX_DOCUMENTS", str(DEFAULT_GENERAL_MAX_DOCUMENTS))
+        )
 
     @classmethod
     def from_env(cls) -> KnowledgeRetriever:
@@ -97,11 +194,18 @@ class KnowledgeRetriever:
         retrieved: list[RetrievedDocument] = []
         seen_ids: set[str] = set()
 
-        def add_results(result: dict) -> None:
+        def add_results(
+            result: dict,
+            *,
+            accept: Callable[[dict[str, Any]], bool],
+            min_score: float | None = None,
+            max_documents: int | None = None,
+        ) -> None:
             ids = result.get("ids", [[]])[0]
             documents = result.get("documents", [[]])[0]
             metadatas = result.get("metadatas", [[]])[0]
             distances = result.get("distances", [[]])[0]
+            accepted_count = 0
             for chunk_id, document, metadata, distance in zip(
                 ids,
                 documents,
@@ -109,11 +213,20 @@ class KnowledgeRetriever:
                 distances,
                 strict=False,
             ):
+                metadata = metadata or {}
+                if not accept(metadata):
+                    continue
                 if chunk_id in seen_ids:
                     continue
-                seen_ids.add(chunk_id)
 
                 score = 1.0 / (1.0 + float(distance))
+                if min_score is not None and score < min_score:
+                    continue
+                if max_documents is not None and accepted_count >= max_documents:
+                    break
+
+                seen_ids.add(chunk_id)
+                accepted_count += 1
                 source = SourceReference(
                     document_id=str(metadata.get("document_id", "")),
                     source=str(metadata.get("source", "")),
@@ -140,14 +253,22 @@ class KnowledgeRetriever:
             where={"problem_id": request.problem.problem_id},
             include=["documents", "metadatas", "distances"],
         )
-        add_results(problem_result)
+        add_results(
+            problem_result,
+            accept=lambda metadata: _is_same_problem_editorial(metadata, request),
+        )
 
         general_result = collection.query(
             query_embeddings=[query_embedding],
-            n_results=max(self.top_k, 1),
+            n_results=max(self.top_k * 5, 10),
             include=["documents", "metadatas", "distances"],
         )
-        add_results(general_result)
+        add_results(
+            general_result,
+            accept=lambda metadata: _is_relevant_general_document(metadata, request),
+            min_score=self.general_min_score,
+            max_documents=self.general_max_documents,
+        )
 
         retrieved.sort(key=lambda item: item.distance)
         return retrieved[: self.top_k]

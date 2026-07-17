@@ -29,11 +29,56 @@ function agentRenderList(title, items) {
   `;
 }
 
+function renderSourceList(sources) {
+  const values = Array.isArray(sources) ? sources : [];
+  if (!values.length) {
+    return '';
+  }
+
+  return `
+    <section class="agent-result-section">
+      <h3>知识库来源</h3>
+      <ul>
+        ${values.map((source) => `
+          <li>
+            ${agentEscapeHtml(source.title || source.document_id || source.source || '知识片段')}
+            ${source.knowledge_point ? `｜ ${agentEscapeHtml(source.knowledge_point)}` : ''}
+            ${source.score !== undefined ? `｜ score ${agentEscapeHtml(source.score)}` : ''}
+          </li>
+        `).join('')}
+      </ul>
+    </section>
+  `;
+}
+
 function setAgentStatus(message, isError = false) {
   const node = document.getElementById('agent-status');
   node.textContent = message || '';
   node.classList.toggle('status-bad', isError);
   node.classList.toggle('status-ok', !isError && Boolean(message));
+}
+
+function appendAgentStatus(message, isError = false) {
+  const node = document.getElementById('agent-status');
+  const prefix = node.textContent ? '\n' : '';
+  node.textContent += `${prefix}${message}`;
+  node.classList.toggle('status-bad', isError);
+  node.classList.toggle('status-ok', !isError && Boolean(node.textContent));
+}
+
+function parseAgentEventData(event) {
+  if (!event?.data_json) {
+    return {};
+  }
+  try {
+    return JSON.parse(event.data_json);
+  } catch {
+    return {};
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function selectedSubmission() {
@@ -133,6 +178,7 @@ function renderDiagnosis(data) {
     ${agentRenderList('证据', data.evidence)}
     ${agentRenderList('知识点', data.knowledge_points)}
     ${agentRenderList('提示', data.hints)}
+    ${renderSourceList(data.sources)}
     <section class="agent-result-section">
       <h3>模型</h3>
       <p>${agentEscapeHtml(data.model || '-')} ${data.provider ? `｜ ${agentEscapeHtml(data.provider)}` : ''}</p>
@@ -203,10 +249,10 @@ async function submitAgentQuestion() {
   const button = document.getElementById('agent-submit-btn');
 
   button.disabled = true;
-  setAgentStatus('正在生成诊断...');
+  setAgentStatus('正在创建诊断任务...');
 
   try {
-    const response = await window.ojAuth.authFetch('/api/assistant/diagnoses', {
+    const response = await window.ojAuth.authFetch('/api/assistant/diagnoses/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -218,11 +264,46 @@ async function submitAgentQuestion() {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || '诊断失败');
+      throw new Error(data.error || '创建诊断任务失败');
     }
-    renderDiagnosis(data);
-    await loadAgentConversations();
-    setAgentStatus('诊断完成');
+
+    let lastEventId = 0;
+    const pollIntervalMs = Number(data.poll_interval_ms || 700);
+    let finished = false;
+
+    while (!finished) {
+      await sleep(pollIntervalMs);
+      const eventsResponse = await window.ojAuth.authFetch(
+        `/api/assistant/diagnoses/stream/${encodeURIComponent(data.job_id)}/events?after=${lastEventId}`,
+      );
+      const eventsData = await eventsResponse.json();
+      if (!eventsResponse.ok) {
+        throw new Error(eventsData.error || '读取诊断进度失败');
+      }
+
+      for (const event of eventsData.events || []) {
+        lastEventId = Math.max(lastEventId, Number(event.id || 0));
+        const eventData = parseAgentEventData(event);
+
+        if (event.event === 'status') {
+          appendAgentStatus(eventData.message || eventData.stage || '诊断进行中');
+        } else if (event.event === 'sources') {
+          const sourceCount = Array.isArray(eventData.sources) ? eventData.sources.length : 0;
+          appendAgentStatus(`${eventData.message || '知识库检索完成'}，命中 ${sourceCount} 个片段`);
+        } else if (event.event === 'done') {
+          renderDiagnosis(eventData);
+          await loadAgentConversations();
+          appendAgentStatus('诊断完成');
+          finished = true;
+        } else if (event.event === 'error') {
+          throw new Error(eventData.message || '诊断失败');
+        }
+      }
+
+      if (eventsData.done && !finished) {
+        finished = true;
+      }
+    }
   } finally {
     button.disabled = false;
   }

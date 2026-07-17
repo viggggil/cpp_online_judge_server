@@ -110,7 +110,11 @@ crow::json::wvalue make_submission_json(const AiSubmissionContext& submission) {
 
 AssistantDiagnosisResult AiAssistantService::diagnose(
     const AuthenticatedUser& user,
-    const AssistantDiagnosisRequest& request) const {
+    const AssistantDiagnosisRequest& request,
+    const ProgressCallback& progress) const {
+    if (progress) {
+        progress("validating", "正在校验诊断请求");
+    }
     if (request.problem_id <= 0) {
         throw std::runtime_error("problem_id must be positive");
     }
@@ -127,12 +131,18 @@ AssistantDiagnosisResult AiAssistantService::diagnose(
         throw std::runtime_error("user not found");
     }
 
+    if (progress) {
+        progress("loading_problem", "正在读取题目信息");
+    }
     ProblemRepository problem_repository;
     const auto problem = problem_repository.find_detail(request.problem_id);
     if (!problem) {
         throw std::runtime_error("problem not found");
     }
 
+    if (progress) {
+        progress("loading_submission", "正在读取你的提交记录");
+    }
     SubmissionRepository submission_repository;
     const auto submission =
         submission_repository.find_ai_submission_for_user(*user_id, request.submission_id);
@@ -153,8 +163,14 @@ AssistantDiagnosisResult AiAssistantService::diagnose(
     payload["hint_level"] = request.hint_level;
     payload["question"] = request.question;
 
+    if (progress) {
+        progress("retrieving_knowledge", "正在查询本地知识库");
+    }
     AgentClient agent_client;
     const auto started_at = std::chrono::steady_clock::now();
+    if (progress) {
+        progress("generating", "正在调用模型生成中文诊断");
+    }
     auto diagnosis = agent_client.create_diagnosis(request_id, payload);
     const auto latency_ms = static_cast<int>(
         std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -187,6 +203,9 @@ AssistantDiagnosisResult AiAssistantService::diagnose(
     create_request.error_type = diagnosis.error_type;
     create_request.confidence = diagnosis.confidence;
 
+    if (progress) {
+        progress("saving", "正在写入对话数据库");
+    }
     ConversationRepository conversation_repository;
     const auto stored =
         conversation_repository.create_conversation_with_first_message(create_request);

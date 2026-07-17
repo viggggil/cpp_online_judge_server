@@ -23,13 +23,17 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <mutex>
 #include <memory>
 #include <netdb.h>
 #include <optional>
+#include <random>
 #include <sstream>
 #include <string_view>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <thread>
+#include <unordered_map>
 #include <unistd.h>
 
 namespace oj::server {
@@ -111,6 +115,84 @@ crow::response json_error(int code, const std::string& message) {
     crow::json::wvalue body;
     body["error"] = message;
     return crow::response{code, body};
+}
+
+struct AssistantDiagnosisStageEvent {
+    int id{0};
+    std::string event;
+    std::string data_json;
+};
+
+struct AssistantDiagnosisStageJob {
+    explicit AssistantDiagnosisStageJob(std::string owner) : owner_username(std::move(owner)) {}
+
+    std::string owner_username;
+    bool done{false};
+    std::int64_t created_at{unix_now_seconds()};
+    std::vector<AssistantDiagnosisStageEvent> events;
+    std::mutex mutex;
+};
+
+std::mutex g_assistant_diagnosis_jobs_mutex;
+std::unordered_map<std::string, std::shared_ptr<AssistantDiagnosisStageJob>>
+    g_assistant_diagnosis_jobs;
+
+std::string make_route_id(const std::string& prefix) {
+    static thread_local std::mt19937_64 rng{std::random_device{}()};
+    const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
+    std::ostringstream out;
+    out << prefix << "_" << tick << "_" << std::hex << rng();
+    return out.str();
+}
+
+std::string make_status_data_json(std::string_view stage, std::string_view message) {
+    crow::json::wvalue data;
+    data["stage"] = std::string{stage};
+    data["message"] = std::string{message};
+    return data.dump();
+}
+
+void append_assistant_diagnosis_event(
+    const std::shared_ptr<AssistantDiagnosisStageJob>& job,
+    const std::string& event,
+    const std::string& data_json) {
+    std::lock_guard<std::mutex> lock(job->mutex);
+    const int next_id = job->events.empty() ? 1 : job->events.back().id + 1;
+    job->events.push_back(AssistantDiagnosisStageEvent{next_id, event, data_json});
+}
+
+void finish_assistant_diagnosis_job(const std::shared_ptr<AssistantDiagnosisStageJob>& job) {
+    std::lock_guard<std::mutex> lock(job->mutex);
+    job->done = true;
+}
+
+std::shared_ptr<AssistantDiagnosisStageJob> find_assistant_diagnosis_job(
+    const std::string& job_id) {
+    std::lock_guard<std::mutex> lock(g_assistant_diagnosis_jobs_mutex);
+    const auto it = g_assistant_diagnosis_jobs.find(job_id);
+    if (it == g_assistant_diagnosis_jobs.end()) {
+        return nullptr;
+    }
+    return it->second;
+}
+
+void cleanup_finished_assistant_diagnosis_jobs() {
+    const auto now = unix_now_seconds();
+    std::lock_guard<std::mutex> lock(g_assistant_diagnosis_jobs_mutex);
+    for (auto it = g_assistant_diagnosis_jobs.begin();
+         it != g_assistant_diagnosis_jobs.end();) {
+        bool removable = false;
+        {
+            std::lock_guard<std::mutex> job_lock(it->second->mutex);
+            removable = it->second->done && now - it->second->created_at > 600;
+        }
+
+        if (removable) {
+            it = g_assistant_diagnosis_jobs.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 crow::json::wvalue make_auth_json(const std::string& token,
@@ -367,6 +449,16 @@ crow::json::wvalue::list make_source_json_list(
         items.push_back(std::move(item));
     }
     return items;
+}
+
+crow::json::wvalue make_assistant_sources_event_json(
+    const std::vector<AgentSourceReference>& sources) {
+    crow::json::wvalue body;
+    body["message"] = sources.empty()
+        ? "知识库未返回匹配来源"
+        : "知识库检索完成";
+    body["sources"] = make_source_json_list(sources);
+    return body;
 }
 
 crow::json::wvalue make_assistant_diagnosis_json(
@@ -882,6 +974,132 @@ void register_routes(crow::Crow<>& app) {
             } catch (const std::exception& ex) {
                 return json_error(400, ex.what());
             }
+        });
+
+    CROW_ROUTE(app, "/api/assistant/diagnoses/stream")
+        .methods(crow::HTTPMethod::POST)([](const crow::request& req) {
+            const auto user = require_user(req);
+            if (!user) {
+                return json_error(401, "please login first");
+            }
+
+            const auto json = crow::json::load(req.body);
+            if (!json ||
+                !json.has("problem_id") ||
+                !json.has("submission_id")) {
+                return json_error(400, "problem_id and submission_id are required");
+            }
+
+            try {
+                cleanup_finished_assistant_diagnosis_jobs();
+
+                AssistantDiagnosisRequest diagnosis_request;
+                diagnosis_request.problem_id = json["problem_id"].i();
+                diagnosis_request.submission_id = json["submission_id"].s();
+                diagnosis_request.hint_level = json.has("hint_level")
+                    ? static_cast<int>(json["hint_level"].i())
+                    : 2;
+                diagnosis_request.question = json.has("question")
+                    ? std::string{json["question"].s()}
+                    : "";
+
+                const auto job_id = make_route_id("diagjob");
+                auto job = std::make_shared<AssistantDiagnosisStageJob>(user->username);
+                {
+                    std::lock_guard<std::mutex> lock(g_assistant_diagnosis_jobs_mutex);
+                    g_assistant_diagnosis_jobs[job_id] = job;
+                }
+
+                append_assistant_diagnosis_event(
+                    job,
+                    "status",
+                    make_status_data_json("queued", "诊断任务已创建"));
+
+                const auto user_copy = *user;
+                std::thread([job, user_copy, diagnosis_request]() {
+                    try {
+                        AiAssistantService service;
+                        const auto result = service.diagnose(
+                            user_copy,
+                            diagnosis_request,
+                            [job](std::string_view stage, std::string_view message) {
+                                append_assistant_diagnosis_event(
+                                    job,
+                                    "status",
+                                    make_status_data_json(stage, message));
+                            });
+
+                        append_assistant_diagnosis_event(
+                            job,
+                            "sources",
+                            make_assistant_sources_event_json(result.diagnosis.sources).dump());
+                        append_assistant_diagnosis_event(
+                            job,
+                            "done",
+                            make_assistant_diagnosis_json(result).dump());
+                    } catch (const std::exception& ex) {
+                        crow::json::wvalue error;
+                        error["message"] = ex.what();
+                        append_assistant_diagnosis_event(job, "error", error.dump());
+                    }
+                    finish_assistant_diagnosis_job(job);
+                }).detach();
+
+                crow::json::wvalue body;
+                body["job_id"] = job_id;
+                body["poll_interval_ms"] = 700;
+                return crow::response{202, body};
+            } catch (const std::exception& ex) {
+                return json_error(400, ex.what());
+            }
+        });
+
+    CROW_ROUTE(app, "/api/assistant/diagnoses/stream/<string>/events")
+        .methods(crow::HTTPMethod::GET)([](const crow::request& req,
+                                           const std::string& job_id) {
+            const auto user = require_user(req);
+            if (!user) {
+                return json_error(401, "please login first");
+            }
+
+            auto job = find_assistant_diagnosis_job(job_id);
+            if (!job || job->owner_username != user->username) {
+                return json_error(404, "diagnosis job not found");
+            }
+
+            int after = 0;
+            if (const auto after_param = req.url_params.get("after");
+                after_param != nullptr) {
+                try {
+                    after = std::stoi(after_param);
+                } catch (...) {
+                    after = 0;
+                }
+            }
+
+            crow::json::wvalue::list events;
+            bool done = false;
+            {
+                std::lock_guard<std::mutex> lock(job->mutex);
+                done = job->done;
+                for (const auto& event : job->events) {
+                    if (event.id <= after) {
+                        continue;
+                    }
+
+                    crow::json::wvalue item;
+                    item["id"] = event.id;
+                    item["event"] = event.event;
+                    item["data_json"] = event.data_json;
+                    events.push_back(std::move(item));
+                }
+            }
+
+            crow::json::wvalue body;
+            body["job_id"] = job_id;
+            body["done"] = done;
+            body["events"] = std::move(events);
+            return crow::response{200, body};
         });
 
     CROW_ROUTE(app, "/api/assistant/conversations")
