@@ -28,11 +28,18 @@ struct AssistantDiagnosisResult {
 class AiAssistantService {
 public:
     using ProgressCallback = std::function<void(std::string_view stage, std::string_view message)>;
+    using StreamEventCallback = AgentClient::StreamEventCallback;
 
     AssistantDiagnosisResult diagnose(
         const AuthenticatedUser& user,
         const AssistantDiagnosisRequest& request,
         const ProgressCallback& progress = nullptr) const;
+
+    AssistantDiagnosisResult diagnose_stream(
+        const AuthenticatedUser& user,
+        const AssistantDiagnosisRequest& request,
+        const ProgressCallback& progress,
+        const StreamEventCallback& stream_event) const;
 };
 
 } // namespace oj::server

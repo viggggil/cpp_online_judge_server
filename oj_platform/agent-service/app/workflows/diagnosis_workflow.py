@@ -1,5 +1,5 @@
-from uuid import uuid4
 from collections.abc import AsyncIterator
+from uuid import uuid4
 
 from app.api.dependencies import RequestContext
 from app.clients.openrouter_client import OpenRouterClient, unix_now
@@ -101,14 +101,29 @@ class DiagnosisWorkflow:
 
         yield sse_event(
             "status",
-            {"stage": "generating", "message": "正在生成诊断"},
+            {"stage": "generating", "message": "模型正在流式生成中文诊断"},
         )
-        messages = self.prompt_service.build_diagnosis_messages(
+        messages = self.prompt_service.build_streaming_diagnosis_messages(
             request,
             retrieved_documents,
         )
+        draft_parts: list[str] = []
+        async for delta in self.llm_client.stream_text(messages):
+            draft_parts.append(delta)
+            yield sse_event("delta", {"content": delta})
+
+        draft_text = "".join(draft_parts).strip()
+        yield sse_event(
+            "status",
+            {"stage": "structuring", "message": "正在整理最终结构化诊断"},
+        )
+        structuring_messages = self.prompt_service.build_draft_structuring_messages(
+            request,
+            draft_text,
+            retrieved_documents,
+        )
         result = await self.llm_client.invoke_structured(
-            messages=messages,
+            messages=structuring_messages,
             response_model=SubmissionDiagnosis,
         )
         diagnosis = self.safety_service.validate(result.data, request.hint_level)

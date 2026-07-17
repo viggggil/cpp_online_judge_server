@@ -51,6 +51,31 @@ function renderSourceList(sources) {
   `;
 }
 
+function appendStreamingDiagnosisText(content) {
+  if (!content) {
+    return;
+  }
+
+  const card = document.getElementById('agent-result-card');
+  card.classList.remove('hidden');
+  document.getElementById('agent-result-title').textContent = '诊断生成中';
+  document.getElementById('agent-result-meta').textContent = '模型正在输出普通中文诊断，完成后会整理为最终结构化答案';
+
+  const container = document.getElementById('agent-result-content');
+  let draft = document.getElementById('agent-streaming-draft');
+  if (!draft) {
+    container.innerHTML = `
+      <section class="agent-result-section">
+        <h3>实时诊断</h3>
+        <p id="agent-streaming-draft" class="agent-streaming-draft"></p>
+      </section>
+    `;
+    draft = document.getElementById('agent-streaming-draft');
+  }
+
+  draft.textContent += content;
+}
+
 function setAgentStatus(message, isError = false) {
   const node = document.getElementById('agent-status');
   node.textContent = message || '';
@@ -290,6 +315,8 @@ async function submitAgentQuestion() {
         } else if (event.event === 'sources') {
           const sourceCount = Array.isArray(eventData.sources) ? eventData.sources.length : 0;
           appendAgentStatus(`${eventData.message || '知识库检索完成'}，命中 ${sourceCount} 个片段`);
+        } else if (event.event === 'delta') {
+          appendStreamingDiagnosisText(eventData.content || '');
         } else if (event.event === 'done') {
           renderDiagnosis(eventData);
           await loadAgentConversations();

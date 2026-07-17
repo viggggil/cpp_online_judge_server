@@ -1019,7 +1019,7 @@ void register_routes(crow::Crow<>& app) {
                 std::thread([job, user_copy, diagnosis_request]() {
                     try {
                         AiAssistantService service;
-                        const auto result = service.diagnose(
+                        const auto result = service.diagnose_stream(
                             user_copy,
                             diagnosis_request,
                             [job](std::string_view stage, std::string_view message) {
@@ -1027,12 +1027,17 @@ void register_routes(crow::Crow<>& app) {
                                     job,
                                     "status",
                                     make_status_data_json(stage, message));
+                            },
+                            [job](std::string_view event, std::string_view data_json) {
+                                if (event == "done") {
+                                    return;
+                                }
+                                append_assistant_diagnosis_event(
+                                    job,
+                                    std::string{event},
+                                    std::string{data_json});
                             });
 
-                        append_assistant_diagnosis_event(
-                            job,
-                            "sources",
-                            make_assistant_sources_event_json(result.diagnosis.sources).dump());
                         append_assistant_diagnosis_event(
                             job,
                             "done",

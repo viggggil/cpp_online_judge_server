@@ -6,11 +6,13 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cctype>
 #include <cstring>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
+#include <algorithm>
 
 namespace oj::server {
 
@@ -229,6 +231,100 @@ std::vector<AgentSourceReference> json_source_list(
     return items;
 }
 
+AgentDiagnosisResponse parse_agent_diagnosis_response(const crow::json::rvalue& json) {
+    AgentDiagnosisResponse response;
+    response.request_id = json_string(json, "request_id");
+    response.diagnosis_id = json_string(json, "diagnosis_id");
+    response.user_id = json_i64(json, "user_id");
+    response.problem_id = json_i64(json, "problem_id");
+    response.submission_id = json_string(json, "submission_id");
+    response.judge_status = json_string(json, "judge_status");
+    response.hint_level = json_int(json, "hint_level");
+    response.error_type = json_string(json, "error_type");
+    response.summary = json_string(json, "summary");
+    response.analysis = json_string(json, "analysis");
+    response.evidence = json_string_list(json, "evidence");
+    response.knowledge_points = json_string_list(json, "knowledge_points");
+    response.hints = json_string_list(json, "hints");
+    response.sources = json_source_list(json, "sources");
+    response.confidence = json_double(json, "confidence");
+    response.model = json_string(json, "model");
+    response.provider = json_string(json, "provider");
+    response.generated_at = json_i64(json, "generated_at");
+    return response;
+}
+
+std::string to_lower_copy(std::string text) {
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return text;
+}
+
+void feed_sse_data(
+    std::string& buffer,
+    std::string_view data,
+    const AgentClient::StreamEventCallback& event_callback,
+    AgentDiagnosisResponse& final_response,
+    bool& has_final_response) {
+    buffer.append(data);
+    buffer.erase(
+        std::remove(buffer.begin(), buffer.end(), '\r'),
+        buffer.end());
+
+    while (true) {
+        const auto event_end = buffer.find("\n\n");
+        if (event_end == std::string::npos) {
+            break;
+        }
+
+        const auto block = buffer.substr(0, event_end);
+        buffer.erase(0, event_end + 2);
+        if (block.empty()) {
+            continue;
+        }
+
+        std::string event = "message";
+        std::string data_json;
+        std::istringstream input(block);
+        std::string line;
+        while (std::getline(input, line)) {
+            if (line.rfind("event:", 0) == 0) {
+                event = line.substr(6);
+                while (!event.empty() && event.front() == ' ') {
+                    event.erase(event.begin());
+                }
+            } else if (line.rfind("data:", 0) == 0) {
+                auto part = line.substr(5);
+                while (!part.empty() && part.front() == ' ') {
+                    part.erase(part.begin());
+                }
+                if (!data_json.empty()) {
+                    data_json.push_back('\n');
+                }
+                data_json += part;
+            }
+        }
+
+        if (event_callback) {
+            event_callback(event, data_json);
+        }
+
+        if (event == "done") {
+            const auto json = crow::json::load(data_json);
+            if (!json) {
+                throw std::runtime_error("agent service stream returned invalid done JSON");
+            }
+            final_response = parse_agent_diagnosis_response(json);
+            has_final_response = true;
+        } else if (event == "error") {
+            const auto json = crow::json::load(data_json);
+            const auto message = json ? json_string(json, "message") : data_json;
+            throw std::runtime_error(message.empty() ? "agent service stream returned error" : message);
+        }
+    }
+}
+
 } // namespace
 
 AgentClient::AgentClient()
@@ -270,26 +366,159 @@ AgentDiagnosisResponse AgentClient::create_diagnosis(
         throw std::runtime_error("agent service returned invalid JSON");
     }
 
-    AgentDiagnosisResponse response;
-    response.request_id = json_string(json, "request_id");
-    response.diagnosis_id = json_string(json, "diagnosis_id");
-    response.user_id = json_i64(json, "user_id");
-    response.problem_id = json_i64(json, "problem_id");
-    response.submission_id = json_string(json, "submission_id");
-    response.judge_status = json_string(json, "judge_status");
-    response.hint_level = json_int(json, "hint_level");
-    response.error_type = json_string(json, "error_type");
-    response.summary = json_string(json, "summary");
-    response.analysis = json_string(json, "analysis");
-    response.evidence = json_string_list(json, "evidence");
-    response.knowledge_points = json_string_list(json, "knowledge_points");
-    response.hints = json_string_list(json, "hints");
-    response.sources = json_source_list(json, "sources");
-    response.confidence = json_double(json, "confidence");
-    response.model = json_string(json, "model");
-    response.provider = json_string(json, "provider");
-    response.generated_at = json_i64(json, "generated_at");
-    return response;
+    return parse_agent_diagnosis_response(json);
+}
+
+AgentDiagnosisResponse AgentClient::create_diagnosis_stream(
+    const std::string& request_id,
+    const crow::json::wvalue& payload,
+    const StreamEventCallback& event_callback) const {
+    if (std::string{config_.internal_token}.empty()) {
+        throw std::runtime_error("agent internal token is not configured");
+    }
+
+    const auto stream_path = std::string{config_.diagnoses_api_path} + "/stream";
+    const auto parsed_url = parse_http_url(config_.base_url, stream_path);
+    const auto body = payload.dump();
+
+    std::ostringstream request;
+    request << "POST " << parsed_url.path << " HTTP/1.1\r\n"
+            << "Host: " << parsed_url.host << ":" << parsed_url.port << "\r\n"
+            << "Accept: text/event-stream\r\n"
+            << "Content-Type: application/json\r\n"
+            << "Content-Length: " << body.size() << "\r\n"
+            << "X-Internal-Token: " << config_.internal_token << "\r\n"
+            << "X-Request-Id: " << request_id << "\r\n"
+            << "Connection: close\r\n\r\n"
+            << body;
+
+    SocketHandle socket{connect_to_agent(parsed_url, config_)};
+    write_all(socket.get(), request.str());
+
+    std::string raw;
+    std::string header_text;
+    std::string body_buffer;
+    char recv_buffer[4096];
+    while (true) {
+        const auto n = ::recv(socket.get(), recv_buffer, sizeof(recv_buffer), 0);
+        if (n == 0) {
+            throw std::runtime_error("agent service closed connection before headers");
+        }
+        if (n < 0) {
+            throw std::runtime_error(std::string{"recv failed: "} + std::strerror(errno));
+        }
+
+        raw.append(recv_buffer, static_cast<std::size_t>(n));
+        const auto header_end = raw.find("\r\n\r\n");
+        if (header_end == std::string::npos) {
+            continue;
+        }
+
+        header_text = raw.substr(0, header_end);
+        body_buffer = raw.substr(header_end + 4);
+        break;
+    }
+
+    const auto status_line_end = header_text.find("\r\n");
+    std::istringstream status_stream(header_text.substr(0, status_line_end));
+    std::string http_version;
+    int status_code = 0;
+    status_stream >> http_version >> status_code;
+    if (status_code < 200 || status_code >= 300) {
+        body_buffer += read_all(socket.get());
+        const auto headers_lower = to_lower_copy(header_text);
+        if (headers_lower.find("transfer-encoding: chunked") != std::string::npos) {
+            body_buffer = decode_chunked_body(body_buffer);
+        }
+        throw std::runtime_error("agent service returned HTTP " + std::to_string(status_code) + ": " + body_buffer);
+    }
+
+    const auto headers_lower = to_lower_copy(header_text);
+    const bool is_chunked = headers_lower.find("transfer-encoding: chunked") != std::string::npos;
+    AgentDiagnosisResponse final_response;
+    bool has_final_response = false;
+    std::string sse_buffer;
+
+    if (is_chunked) {
+        std::string chunk_buffer = std::move(body_buffer);
+        bool finished = false;
+        while (!finished) {
+            while (true) {
+                const auto line_end = chunk_buffer.find("\r\n");
+                if (line_end == std::string::npos) {
+                    break;
+                }
+
+                const auto size_line = chunk_buffer.substr(0, line_end);
+                const auto semicolon = size_line.find(';');
+                const auto size_text = size_line.substr(0, semicolon);
+                std::size_t chunk_size = 0;
+                try {
+                    chunk_size = static_cast<std::size_t>(std::stoull(size_text, nullptr, 16));
+                } catch (...) {
+                    throw std::runtime_error("failed to parse chunk size from agent stream");
+                }
+
+                if (chunk_buffer.size() < line_end + 2 + chunk_size + 2) {
+                    break;
+                }
+
+                const auto data_start = line_end + 2;
+                if (chunk_size == 0) {
+                    finished = true;
+                    break;
+                }
+
+                feed_sse_data(
+                    sse_buffer,
+                    std::string_view{chunk_buffer.data() + data_start, chunk_size},
+                    event_callback,
+                    final_response,
+                    has_final_response);
+                chunk_buffer.erase(0, data_start + chunk_size + 2);
+            }
+
+            if (finished) {
+                break;
+            }
+
+            const auto n = ::recv(socket.get(), recv_buffer, sizeof(recv_buffer), 0);
+            if (n == 0) {
+                break;
+            }
+            if (n < 0) {
+                throw std::runtime_error(std::string{"recv failed: "} + std::strerror(errno));
+            }
+            chunk_buffer.append(recv_buffer, static_cast<std::size_t>(n));
+        }
+    } else {
+        feed_sse_data(
+            sse_buffer,
+            body_buffer,
+            event_callback,
+            final_response,
+            has_final_response);
+        while (true) {
+            const auto n = ::recv(socket.get(), recv_buffer, sizeof(recv_buffer), 0);
+            if (n == 0) {
+                break;
+            }
+            if (n < 0) {
+                throw std::runtime_error(std::string{"recv failed: "} + std::strerror(errno));
+            }
+            feed_sse_data(
+                sse_buffer,
+                std::string_view{recv_buffer, static_cast<std::size_t>(n)},
+                event_callback,
+                final_response,
+                has_final_response);
+        }
+    }
+
+    if (!has_final_response) {
+        throw std::runtime_error("agent service stream ended without final diagnosis");
+    }
+    return final_response;
 }
 
 } // namespace oj::server

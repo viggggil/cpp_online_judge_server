@@ -131,6 +131,10 @@ body {
   line-height: 1.7;
 }
 
+.agent-streaming-draft {
+  min-height: 160px;
+}
+
 @media (max-width: 640px) {
   .agent-history-controls {
     grid-template-columns: 1fr;
