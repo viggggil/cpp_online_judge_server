@@ -18,6 +18,12 @@ struct AssistantDiagnosisRequest {
     std::string question;
 };
 
+struct AssistantConversationMessageRequest {
+    std::string conversation_id;
+    int hint_level{2};
+    std::string question;
+};
+
 struct AssistantDiagnosisResult {
     std::string conversation_id;
     std::string message_id;
@@ -38,6 +44,12 @@ public:
     AssistantDiagnosisResult diagnose_stream(
         const AuthenticatedUser& user,
         const AssistantDiagnosisRequest& request,
+        const ProgressCallback& progress,
+        const StreamEventCallback& stream_event) const;
+
+    AssistantDiagnosisResult continue_diagnosis_stream(
+        const AuthenticatedUser& user,
+        const AssistantConversationMessageRequest& request,
         const ProgressCallback& progress,
         const StreamEventCallback& stream_event) const;
 };

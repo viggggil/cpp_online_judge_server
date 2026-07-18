@@ -14,81 +14,21 @@ function agentFormatTimestamp(timestamp) {
   return new Date(timestamp * 1000).toLocaleString('zh-CN');
 }
 
-function agentRenderList(title, items) {
-  const values = Array.isArray(items) ? items : [];
-  if (!values.length) {
-    return '';
-  }
-  return `
-    <section class="agent-result-section">
-      <h3>${agentEscapeHtml(title)}</h3>
-      <ul>
-        ${values.map((item) => `<li>${agentEscapeHtml(item)}</li>`).join('')}
-      </ul>
-    </section>
-  `;
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function renderSourceList(sources) {
-  const values = Array.isArray(sources) ? sources : [];
-  if (!values.length) {
-    return '';
-  }
+let agentMode = 'new_conversation';
+let activeConversationId = '';
 
-  return `
-    <section class="agent-result-section">
-      <h3>知识库来源</h3>
-      <ul>
-        ${values.map((source) => `
-          <li>
-            ${agentEscapeHtml(source.title || source.document_id || source.source || '知识片段')}
-            ${source.knowledge_point ? `｜ ${agentEscapeHtml(source.knowledge_point)}` : ''}
-            ${source.score !== undefined ? `｜ score ${agentEscapeHtml(source.score)}` : ''}
-          </li>
-        `).join('')}
-      </ul>
-    </section>
-  `;
-}
-
-function appendStreamingDiagnosisText(content) {
-  if (!content) {
-    return;
-  }
-
-  const card = document.getElementById('agent-result-card');
-  card.classList.remove('hidden');
-  document.getElementById('agent-result-title').textContent = '诊断生成中';
-  document.getElementById('agent-result-meta').textContent = '模型正在输出普通中文诊断，完成后会整理为最终结构化答案';
-
-  const container = document.getElementById('agent-result-content');
-  let draft = document.getElementById('agent-streaming-draft');
-  if (!draft) {
-    container.innerHTML = `
-      <section class="agent-result-section">
-        <h3>实时诊断</h3>
-        <p id="agent-streaming-draft" class="agent-streaming-draft"></p>
-      </section>
-    `;
-    draft = document.getElementById('agent-streaming-draft');
-  }
-
-  draft.textContent += content;
-}
-
-function setAgentStatus(message, isError = false) {
-  const node = document.getElementById('agent-status');
-  node.textContent = message || '';
-  node.classList.toggle('status-bad', isError);
-  node.classList.toggle('status-ok', !isError && Boolean(message));
-}
-
-function appendAgentStatus(message, isError = false) {
-  const node = document.getElementById('agent-status');
-  const prefix = node.textContent ? '\n' : '';
-  node.textContent += `${prefix}${message}`;
-  node.classList.toggle('status-bad', isError);
-  node.classList.toggle('status-ok', !isError && Boolean(node.textContent));
+function setAgentMode(mode) {
+  agentMode = mode;
+  document
+    .getElementById('agent-submission-picker')
+    .classList.toggle('agent-mode-active', mode === 'new_conversation');
+  document
+    .getElementById('agent-conversation-picker')
+    .classList.toggle('agent-mode-active', mode === 'continue_conversation');
 }
 
 function parseAgentEventData(event) {
@@ -102,8 +42,90 @@ function parseAgentEventData(event) {
   }
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
+function chatMessagesNode() {
+  return document.getElementById('agent-chat-messages');
+}
+
+function scrollChatToBottom() {
+  const node = chatMessagesNode();
+  node.scrollTop = node.scrollHeight;
+}
+
+function clearChat() {
+  chatMessagesNode().innerHTML = '';
+}
+
+function appendChatMessage(role, content = '', meta = '') {
+  const wrapper = document.createElement('div');
+  wrapper.className = `agent-chat-message agent-chat-message-${role}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'agent-chat-bubble';
+
+  if (meta) {
+    const metaNode = document.createElement('div');
+    metaNode.className = 'agent-chat-meta';
+    metaNode.textContent = meta;
+    bubble.appendChild(metaNode);
+  }
+
+  const contentNode = document.createElement('div');
+  contentNode.className = 'agent-chat-content';
+  contentNode.textContent = content;
+  bubble.appendChild(contentNode);
+
+  wrapper.appendChild(bubble);
+  chatMessagesNode().appendChild(wrapper);
+  scrollChatToBottom();
+  return contentNode;
+}
+
+function appendToMessage(contentNode, content, { paragraph = false } = {}) {
+  if (!contentNode || !content) {
+    return;
+  }
+  const prefix = paragraph && contentNode.textContent ? '\n\n' : '';
+  contentNode.textContent += `${prefix}${content}`;
+  scrollChatToBottom();
+}
+
+function setMessage(contentNode, content) {
+  if (!contentNode) {
+    return;
+  }
+  contentNode.textContent = content || '';
+  scrollChatToBottom();
+}
+
+function formatSourceLine(source) {
+  const title = source.title || source.document_id || source.source || '知识片段';
+  const score = source.score !== undefined ? `，score ${source.score}` : '';
+  return `${title}${source.knowledge_point ? `，${source.knowledge_point}` : ''}${score}`;
+}
+
+function formatFinalDiagnosis(data) {
+  const lines = [];
+  if (data.summary) {
+    lines.push(data.summary);
+  }
+  if (data.analysis) {
+    lines.push(`分析：\n${data.analysis}`);
+  }
+  if (Array.isArray(data.evidence) && data.evidence.length) {
+    lines.push(`证据：\n${data.evidence.map((item) => `- ${item}`).join('\n')}`);
+  }
+  if (Array.isArray(data.knowledge_points) && data.knowledge_points.length) {
+    lines.push(`知识点：\n${data.knowledge_points.map((item) => `- ${item}`).join('\n')}`);
+  }
+  if (Array.isArray(data.hints) && data.hints.length) {
+    lines.push(`提示：\n${data.hints.map((item) => `- ${item}`).join('\n')}`);
+  }
+  if (Array.isArray(data.sources) && data.sources.length) {
+    lines.push(`知识库来源：\n${data.sources.map((source) => `- ${formatSourceLine(source)}`).join('\n')}`);
+  }
+  lines.push(`模型：${data.model || '-'}${data.provider ? ` ｜ ${data.provider}` : ''}`);
+  lines.push(`会话：${data.conversation_id || '-'} ｜ 消息：${data.message_id || '-'}`);
+  return lines.filter(Boolean).join('\n\n');
 }
 
 function selectedSubmission() {
@@ -115,6 +137,7 @@ function selectedSubmission() {
   return {
     submission_id: option.value,
     problem_id: Number(option.dataset.problemId || '0'),
+    label: option.textContent || option.value,
   };
 }
 
@@ -131,6 +154,9 @@ function renderSubmissions(submissions) {
     document.getElementById('agent-submit-btn').disabled = true;
     return;
   }
+
+  select.disabled = false;
+  document.getElementById('agent-submit-btn').disabled = false;
 
   for (const item of submissions) {
     const option = document.createElement('option');
@@ -161,11 +187,13 @@ function renderConversations(conversations) {
   for (const item of conversations) {
     const option = document.createElement('option');
     option.value = item.conversation_id;
-    option.dataset.problemId = item.problem_id;
-    option.dataset.submissionId = item.submission_id || '';
     option.textContent =
       `${item.title || item.conversation_id} ｜ 题号 ${item.problem_id} ｜ ${item.round_count || 0} 轮 ｜ ${agentFormatTimestamp(item.updated_at)}`;
     select.appendChild(option);
+  }
+
+  if (activeConversationId) {
+    select.value = activeConversationId;
   }
 }
 
@@ -175,7 +203,6 @@ async function loadAgentSubmissions() {
   if (!response.ok) {
     throw new Error(data.error || '加载提交列表失败');
   }
-
   renderSubmissions(data.submissions || []);
 }
 
@@ -185,67 +212,45 @@ async function loadAgentConversations() {
   if (!response.ok) {
     throw new Error(data.error || '加载历史会话失败');
   }
-
   renderConversations(data.conversations || []);
-}
-
-function renderDiagnosis(data) {
-  document.getElementById('agent-result-card').classList.remove('hidden');
-  document.getElementById('agent-result-title').textContent = data.summary || '诊断结果';
-  document.getElementById('agent-result-meta').textContent =
-    `提交：${data.submission_id || '-'} ｜ 题号：${data.problem_id || '-'} ｜ 类型：${data.error_type || '-'} ｜ 置信度：${data.confidence ?? '-'}`;
-
-  document.getElementById('agent-result-content').innerHTML = `
-    <section class="agent-result-section">
-      <h3>分析</h3>
-      <p>${agentEscapeHtml(data.analysis || '')}</p>
-    </section>
-    ${agentRenderList('证据', data.evidence)}
-    ${agentRenderList('知识点', data.knowledge_points)}
-    ${agentRenderList('提示', data.hints)}
-    ${renderSourceList(data.sources)}
-    <section class="agent-result-section">
-      <h3>模型</h3>
-      <p>${agentEscapeHtml(data.model || '-')} ${data.provider ? `｜ ${agentEscapeHtml(data.provider)}` : ''}</p>
-      <p>会话：${agentEscapeHtml(data.conversation_id || '-')} ｜ 消息：${agentEscapeHtml(data.message_id || '-')}</p>
-    </section>
-  `;
 }
 
 function renderConversationDetail(data) {
   const conversation = data.conversation || {};
   const messages = Array.isArray(data.messages) ? data.messages : [];
 
-  document.getElementById('agent-result-card').classList.remove('hidden');
-  document.getElementById('agent-result-title').textContent = conversation.title || '历史会话';
-  document.getElementById('agent-result-meta').textContent =
-    `提交：${conversation.submission_id || '-'} ｜ 题号：${conversation.problem_id || '-'} ｜ 轮次：${conversation.round_count || messages.length || 0} ｜ 更新时间：${agentFormatTimestamp(conversation.updated_at)}`;
+  clearChat();
+  if (!messages.length) {
+    appendChatMessage('assistant', '该会话暂无消息');
+    return;
+  }
 
-  const messageHtml = messages.length
-    ? messages.map((message) => `
-        <section class="agent-result-section">
-          <h3>第 ${agentEscapeHtml(message.round_no || '-')} 轮</h3>
-          <p><strong>用户：</strong>${agentEscapeHtml(message.user_content || '')}</p>
-          <p><strong>AI：</strong>${agentEscapeHtml(message.assistant_content || '')}</p>
-          <p class="meta">模型：${agentEscapeHtml(message.model || '-')} ${message.provider ? `｜ ${agentEscapeHtml(message.provider)}` : ''} ｜ 提示等级：${agentEscapeHtml(message.hint_level || '-')} ｜ 消息：${agentEscapeHtml(message.message_id || '-')}</p>
-        </section>
-      `).join('')
-    : '<section class="agent-result-section"><p>该会话暂无消息</p></section>';
-
-  document.getElementById('agent-result-content').innerHTML = messageHtml;
+  for (const message of messages) {
+    appendChatMessage(
+      'user',
+      message.user_content || '',
+      `第 ${message.round_no || '-'} 轮 ｜ 提交 ${conversation.submission_id || '-'}`,
+    );
+    appendChatMessage(
+      'assistant',
+      message.assistant_content || '',
+      `AI ｜ ${message.model || '-'}${message.provider ? ` ｜ ${message.provider}` : ''}`,
+    );
+  }
 }
 
 async function loadSelectedConversation() {
   const select = document.getElementById('agent-conversation-select');
   const conversationId = select.value;
   if (!conversationId) {
-    setAgentStatus('请先选择一个历史会话', true);
+    appendChatMessage('assistant', '请先选择一个历史会话');
     return;
   }
 
   const button = document.getElementById('agent-load-conversation-btn');
   button.disabled = true;
-  setAgentStatus('正在加载历史会话...');
+  setAgentMode('continue_conversation');
+  activeConversationId = conversationId;
 
   try {
     const response = await window.ojAuth.authFetch(
@@ -256,36 +261,82 @@ async function loadSelectedConversation() {
       throw new Error(data.error || '加载历史会话失败');
     }
     renderConversationDetail(data);
-    setAgentStatus('历史会话已加载');
   } finally {
     button.disabled = false;
   }
 }
 
+function shouldShowStatus(stage, message) {
+  if ([
+    'queued',
+    'validating',
+    'loading_problem',
+    'loading_submission',
+    'saving',
+  ].includes(stage)) {
+    return false;
+  }
+
+  return ![
+    '正在查询本地知识库',
+    '正在调用模型流式生成中文诊断',
+  ].includes(message);
+}
+
 async function submitAgentQuestion() {
+  const input = document.getElementById('agent-question-input');
+  const question = input.value.trim();
+  const hintLevel = Number(document.getElementById('agent-hint-level').value || '2');
+  const button = document.getElementById('agent-submit-btn');
   const submission = selectedSubmission();
-  if (!submission) {
-    setAgentStatus('请先选择一次提交', true);
+  const conversationId = document.getElementById('agent-conversation-select').value;
+
+  if (!question) {
+    appendChatMessage('assistant', '请先输入你的问题');
+    return;
+  }
+  if (agentMode === 'new_conversation' && !submission) {
+    appendChatMessage('assistant', '请先选择一次提交');
+    return;
+  }
+  if (agentMode === 'continue_conversation' && !conversationId) {
+    appendChatMessage('assistant', '请先选择一个历史会话');
     return;
   }
 
-  const question = document.getElementById('agent-question-input').value.trim();
-  const hintLevel = Number(document.getElementById('agent-hint-level').value || '2');
-  const button = document.getElementById('agent-submit-btn');
-
   button.disabled = true;
-  setAgentStatus('正在创建诊断任务...');
+  input.disabled = true;
+  appendChatMessage(
+    'user',
+    question,
+    agentMode === 'new_conversation'
+      ? submission.label
+      : `继续会话 ${conversationId}`,
+  );
+  const assistantMessage = appendChatMessage('assistant', '', 'AI');
+  input.value = '';
+  input.style.height = '';
 
   try {
-    const response = await window.ojAuth.authFetch('/api/assistant/diagnoses/stream', {
+    const endpoint = agentMode === 'new_conversation'
+      ? '/api/assistant/diagnoses/stream'
+      : `/api/assistant/conversations/${encodeURIComponent(conversationId)}/messages/stream`;
+    const requestBody = agentMode === 'new_conversation'
+      ? {
+          problem_id: submission.problem_id,
+          submission_id: submission.submission_id,
+          hint_level: hintLevel,
+          question,
+        }
+      : {
+          hint_level: hintLevel,
+          question,
+        };
+
+    const response = await window.ojAuth.authFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        problem_id: submission.problem_id,
-        submission_id: submission.submission_id,
-        hint_level: hintLevel,
-        question,
-      }),
+      body: JSON.stringify(requestBody),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -311,16 +362,18 @@ async function submitAgentQuestion() {
         const eventData = parseAgentEventData(event);
 
         if (event.event === 'status') {
-          appendAgentStatus(eventData.message || eventData.stage || '诊断进行中');
+          if (shouldShowStatus(eventData.stage, eventData.message)) {
+            appendToMessage(assistantMessage, eventData.message || eventData.stage || '诊断进行中', { paragraph: true });
+          }
         } else if (event.event === 'sources') {
           const sourceCount = Array.isArray(eventData.sources) ? eventData.sources.length : 0;
-          appendAgentStatus(`${eventData.message || '知识库检索完成'}，命中 ${sourceCount} 个片段`);
+          appendToMessage(assistantMessage, `${eventData.message || '知识库检索完成'}，命中 ${sourceCount} 个片段`, { paragraph: true });
         } else if (event.event === 'delta') {
-          appendStreamingDiagnosisText(eventData.content || '');
+          appendToMessage(assistantMessage, eventData.content || '');
         } else if (event.event === 'done') {
-          renderDiagnosis(eventData);
+          setMessage(assistantMessage, formatFinalDiagnosis(eventData));
+          activeConversationId = eventData.conversation_id || activeConversationId;
           await loadAgentConversations();
-          appendAgentStatus('诊断完成');
           finished = true;
         } else if (event.event === 'error') {
           throw new Error(eventData.message || '诊断失败');
@@ -331,9 +384,47 @@ async function submitAgentQuestion() {
         finished = true;
       }
     }
+  } catch (error) {
+    appendToMessage(assistantMessage, error.message || '诊断失败', { paragraph: true });
   } finally {
     button.disabled = false;
+    input.disabled = false;
+    input.focus();
   }
+}
+
+function bindComposer() {
+  const input = document.getElementById('agent-question-input');
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+  });
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      submitAgentQuestion();
+    }
+  });
+}
+
+function bindModePickers() {
+  const submissionPicker = document.getElementById('agent-submission-picker');
+  const conversationPicker = document.getElementById('agent-conversation-picker');
+  const submissionSelect = document.getElementById('agent-submission-select');
+  const conversationSelect = document.getElementById('agent-conversation-select');
+
+  submissionPicker.addEventListener('click', () => setAgentMode('new_conversation'));
+  conversationPicker.addEventListener('click', () => setAgentMode('continue_conversation'));
+  submissionSelect.addEventListener('focus', () => setAgentMode('new_conversation'));
+  submissionSelect.addEventListener('change', () => setAgentMode('new_conversation'));
+  conversationSelect.addEventListener('focus', () => setAgentMode('continue_conversation'));
+  conversationSelect.addEventListener('change', () => {
+    setAgentMode('continue_conversation');
+    activeConversationId = conversationSelect.value;
+    loadSelectedConversation().catch((error) => {
+      appendChatMessage('assistant', error.message || '加载历史会话失败');
+    });
+  });
 }
 
 async function initAgentPage() {
@@ -344,21 +435,25 @@ async function initAgentPage() {
   window.ojNav.bindProtectedNavigation();
 
   document.getElementById('agent-submit-btn').addEventListener('click', () => {
-    submitAgentQuestion().catch((error) => {
-      setAgentStatus(error.message || '诊断失败', true);
-    });
+    submitAgentQuestion();
   });
   document.getElementById('agent-load-conversation-btn').addEventListener('click', () => {
     loadSelectedConversation().catch((error) => {
-      setAgentStatus(error.message || '加载历史会话失败', true);
+      appendChatMessage('assistant', error.message || '加载历史会话失败');
     });
   });
+  bindComposer();
+  bindModePickers();
 
-  setAgentStatus('正在加载提交记录和历史会话...');
-  await Promise.all([loadAgentSubmissions(), loadAgentConversations()]);
-  setAgentStatus('请选择一次提交并输入问题');
+  appendChatMessage('assistant', '正在加载提交记录和历史会话...');
+  try {
+    await Promise.all([loadAgentSubmissions(), loadAgentConversations()]);
+    clearChat();
+    appendChatMessage('assistant', '选择一次提交，输入问题后我会开始诊断。');
+  } catch (error) {
+    clearChat();
+    appendChatMessage('assistant', error.message || '页面初始化失败');
+  }
 }
 
-initAgentPage().catch((error) => {
-  setAgentStatus(error.message || '页面初始化失败', true);
-});
+initAgentPage();

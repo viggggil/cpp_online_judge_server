@@ -17,6 +17,9 @@ AiConversationSummary build_conversation_summary(sql::ResultSet& row) {
     item.conversation_id = row.getString("conversation_id");
     item.user_id = row.getInt64("user_id");
     item.problem_id = row.getInt64("problem_id");
+    if (!row.isNull("submission_db_id")) {
+        item.submission_db_id = row.getInt64("submission_db_id");
+    }
     if (!row.isNull("submission_id")) {
         item.submission_id = row.getString("submission_id");
     }
@@ -96,7 +99,8 @@ std::vector<AiConversationSummary> ConversationRepository::list_for_user(
     if (problem_id) {
         statement.reset(connection->prepareStatement(
             "SELECT conversation_id, user_id, problem_id, submission_id, title, "
-            "hint_level, round_count, status, last_message_at, created_at, updated_at "
+            "submission_db_id, hint_level, round_count, status, last_message_at, "
+            "created_at, updated_at "
             "FROM ai_conversation "
             "WHERE user_id = ? AND problem_id = ? "
             "ORDER BY updated_at DESC, id DESC "
@@ -107,7 +111,8 @@ std::vector<AiConversationSummary> ConversationRepository::list_for_user(
     } else {
         statement.reset(connection->prepareStatement(
             "SELECT conversation_id, user_id, problem_id, submission_id, title, "
-            "hint_level, round_count, status, last_message_at, created_at, updated_at "
+            "submission_db_id, hint_level, round_count, status, last_message_at, "
+            "created_at, updated_at "
             "FROM ai_conversation "
             "WHERE user_id = ? "
             "ORDER BY updated_at DESC, id DESC "
@@ -131,7 +136,8 @@ std::optional<AiConversationDetail> ConversationRepository::find_for_user(
     auto conversation_statement = std::unique_ptr<sql::PreparedStatement>{
         connection->prepareStatement(
             "SELECT id, conversation_id, user_id, problem_id, submission_id, title, "
-            "hint_level, round_count, status, last_message_at, created_at, updated_at "
+            "submission_db_id, hint_level, round_count, status, last_message_at, "
+            "created_at, updated_at "
             "FROM ai_conversation "
             "WHERE conversation_id = ? AND user_id = ?")
     };
@@ -260,6 +266,104 @@ StoredConversationMessage ConversationRepository::create_conversation_with_first
         request.conversation_id,
         request.message_id,
         1,
+    };
+}
+
+StoredConversationMessage ConversationRepository::append_message(
+    const AppendConversationMessageRequest& request) const {
+    auto connection = mysql_client_.create_connection();
+    const auto now = unix_now();
+    int round_no = 1;
+
+    try {
+        connection->setAutoCommit(false);
+
+        auto conversation_statement = std::unique_ptr<sql::PreparedStatement>{
+            connection->prepareStatement(
+                "SELECT id, round_count "
+                "FROM ai_conversation "
+                "WHERE conversation_id = ? AND user_id = ? "
+                "FOR UPDATE")
+        };
+        conversation_statement->setString(1, request.conversation_id);
+        conversation_statement->setInt64(2, request.user_id);
+
+        auto conversation_result =
+            std::unique_ptr<sql::ResultSet>{conversation_statement->executeQuery()};
+        if (!conversation_result->next()) {
+            throw std::runtime_error("conversation not found or not accessible");
+        }
+
+        const auto conversation_db_id = conversation_result->getInt64("id");
+        round_no = conversation_result->getInt("round_count") + 1;
+        if (round_no <= 1) {
+            round_no = 1;
+        }
+
+        auto message_statement = std::unique_ptr<sql::PreparedStatement>{
+            connection->prepareStatement(
+                "INSERT INTO ai_message "
+                "(message_id, conversation_db_id, round_no, hint_level, request_id, "
+                "user_content, assistant_content, model, provider, finish_reason, "
+                "prompt_tokens, completion_tokens, total_tokens, latency_ms, "
+                "knowledge_points_text, sources_json, safety_flags_json, error_type, "
+                "confidence, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        };
+        message_statement->setString(1, request.message_id);
+        message_statement->setInt64(2, conversation_db_id);
+        message_statement->setInt(3, round_no);
+        message_statement->setInt(4, request.hint_level);
+        message_statement->setString(5, request.request_id);
+        message_statement->setString(6, request.user_content);
+        message_statement->setString(7, request.assistant_content);
+        message_statement->setString(8, request.model);
+        message_statement->setString(9, request.provider);
+        message_statement->setString(10, request.finish_reason);
+        message_statement->setInt(11, request.prompt_tokens);
+        message_statement->setInt(12, request.completion_tokens);
+        message_statement->setInt(13, request.total_tokens);
+        message_statement->setInt(14, request.latency_ms);
+        message_statement->setString(15, request.knowledge_points_text);
+        message_statement->setString(16, request.sources_json);
+        message_statement->setString(17, request.safety_flags_json);
+        message_statement->setString(18, request.error_type);
+        if (request.confidence) {
+            message_statement->setDouble(19, *request.confidence);
+        } else {
+            message_statement->setNull(19, sql::DataType::DOUBLE);
+        }
+        message_statement->setInt64(20, now);
+        message_statement->executeUpdate();
+
+        auto update_statement = std::unique_ptr<sql::PreparedStatement>{
+            connection->prepareStatement(
+                "UPDATE ai_conversation "
+                "SET hint_level = ?, round_count = ?, last_message_at = ?, updated_at = ? "
+                "WHERE id = ?")
+        };
+        update_statement->setInt(1, request.hint_level);
+        update_statement->setInt(2, round_no);
+        update_statement->setInt64(3, now);
+        update_statement->setInt64(4, now);
+        update_statement->setInt64(5, conversation_db_id);
+        update_statement->executeUpdate();
+
+        connection->commit();
+        connection->setAutoCommit(true);
+    } catch (...) {
+        try {
+            connection->rollback();
+            connection->setAutoCommit(true);
+        } catch (...) {
+        }
+        throw;
+    }
+
+    return StoredConversationMessage{
+        request.conversation_id,
+        request.message_id,
+        round_no,
     };
 }
 

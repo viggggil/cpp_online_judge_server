@@ -1151,6 +1151,85 @@ void register_routes(crow::Crow<>& app) {
             }
         });
 
+    CROW_ROUTE(app, "/api/assistant/conversations/<string>/messages/stream")
+        .methods(crow::HTTPMethod::POST)([](const crow::request& req,
+                                            const std::string& conversation_id) {
+            const auto user = require_user(req);
+            if (!user) {
+                return json_error(401, "please login first");
+            }
+
+            const auto json = crow::json::load(req.body);
+            if (!json || !json.has("question")) {
+                return json_error(400, "question is required");
+            }
+
+            try {
+                cleanup_finished_assistant_diagnosis_jobs();
+
+                AssistantConversationMessageRequest message_request;
+                message_request.conversation_id = conversation_id;
+                message_request.hint_level = json.has("hint_level")
+                    ? static_cast<int>(json["hint_level"].i())
+                    : 2;
+                message_request.question = std::string{json["question"].s()};
+
+                const auto job_id = make_route_id("diagjob");
+                auto job = std::make_shared<AssistantDiagnosisStageJob>(user->username);
+                {
+                    std::lock_guard<std::mutex> lock(g_assistant_diagnosis_jobs_mutex);
+                    g_assistant_diagnosis_jobs[job_id] = job;
+                }
+
+                append_assistant_diagnosis_event(
+                    job,
+                    "status",
+                    make_status_data_json("queued", "诊断任务已创建"));
+
+                const auto user_copy = *user;
+                std::thread([job, user_copy, message_request]() {
+                    try {
+                        AiAssistantService service;
+                        const auto result = service.continue_diagnosis_stream(
+                            user_copy,
+                            message_request,
+                            [job](std::string_view stage, std::string_view message) {
+                                append_assistant_diagnosis_event(
+                                    job,
+                                    "status",
+                                    make_status_data_json(stage, message));
+                            },
+                            [job](std::string_view event, std::string_view data_json) {
+                                if (event == "done") {
+                                    return;
+                                }
+                                append_assistant_diagnosis_event(
+                                    job,
+                                    std::string{event},
+                                    std::string{data_json});
+                            });
+
+                        append_assistant_diagnosis_event(
+                            job,
+                            "done",
+                            make_assistant_diagnosis_json(result).dump());
+                    } catch (const std::exception& ex) {
+                        crow::json::wvalue error;
+                        error["message"] = ex.what();
+                        append_assistant_diagnosis_event(job, "error", error.dump());
+                    }
+                    finish_assistant_diagnosis_job(job);
+                }).detach();
+
+                crow::json::wvalue body;
+                body["job_id"] = job_id;
+                body["poll_interval_ms"] = 700;
+                return crow::response{202, body};
+            } catch (const std::exception& ex) {
+                return json_error(400, ex.what());
+            }
+        });
+
     CROW_ROUTE(app, "/api/assistant/conversations/<string>")
         .methods(crow::HTTPMethod::GET)([](const crow::request& req,
                                            const std::string& conversation_id) {

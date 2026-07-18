@@ -13,6 +13,7 @@ struct AiConversationSummary {
     std::string conversation_id;
     std::int64_t user_id{0};
     std::int64_t problem_id{0};
+    std::optional<std::int64_t> submission_db_id;
     std::optional<std::string> submission_id;
     std::string title;
     int hint_level{2};
@@ -76,6 +77,8 @@ struct CreateConversationWithMessageRequest {
     std::optional<double> confidence;
 };
 
+using AppendConversationMessageRequest = CreateConversationWithMessageRequest;
+
 struct StoredConversationMessage {
     std::string conversation_id;
     std::string message_id;
@@ -97,6 +100,8 @@ public:
         const std::string& conversation_id) const;
     StoredConversationMessage create_conversation_with_first_message(
         const CreateConversationWithMessageRequest& request) const;
+    StoredConversationMessage append_message(
+        const AppendConversationMessageRequest& request) const;
 
 private:
     MySqlClient mysql_client_;

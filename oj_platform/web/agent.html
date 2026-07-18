@@ -26,41 +26,34 @@
       </div>
     </header>
 
-    <main class="page-stack">
-      <section class="card agent-panel">
-        <label class="label" for="agent-conversation-select">历史会话</label>
-        <div class="agent-history-controls">
-          <select id="agent-conversation-select" class="input"></select>
-          <button id="agent-load-conversation-btn" class="button secondary" type="button">查看</button>
+    <main class="agent-chat-page">
+      <section class="card agent-chat-shell">
+        <div class="agent-chat-topbar">
+          <div id="agent-submission-picker" class="agent-mode-picker agent-chat-picker agent-mode-active">
+            <label class="label" for="agent-submission-select">选择提交创建新对话</label>
+            <select id="agent-submission-select" class="input"></select>
+          </div>
+
+          <div id="agent-conversation-picker" class="agent-mode-picker agent-chat-picker">
+            <label class="label" for="agent-conversation-select">历史会话</label>
+            <div class="agent-picker-row">
+              <select id="agent-conversation-select" class="input"></select>
+              <button id="agent-load-conversation-btn" class="button secondary" type="button">查看</button>
+            </div>
+          </div>
         </div>
 
-        <label class="label" for="agent-submission-select">选择提交</label>
-        <select id="agent-submission-select" class="input"></select>
+        <div id="agent-chat-messages" class="agent-chat-messages"></div>
 
-        <label class="label" for="agent-question-input">提问</label>
-        <textarea id="agent-question-input" class="input agent-question-input" rows="5" placeholder="例如：为什么这次提交会超时？"></textarea>
-
-        <div class="agent-controls">
-          <label class="label agent-hint-label" for="agent-hint-level">提示等级</label>
-          <select id="agent-hint-level" class="input agent-hint-select">
+        <div class="agent-composer">
+          <select id="agent-hint-level" class="input agent-hint-select" aria-label="提示等级">
             <option value="1">Level 1</option>
             <option value="2" selected>Level 2</option>
             <option value="3">Level 3</option>
           </select>
-          <button id="agent-submit-btn" class="button" type="button">确认</button>
+          <textarea id="agent-question-input" class="input agent-question-input" rows="1" placeholder="询问这次提交的问题..."></textarea>
+          <button id="agent-submit-btn" class="button" type="button">发送</button>
         </div>
-
-        <pre id="agent-status" class="notice agent-status"></pre>
-      </section>
-
-      <section id="agent-result-card" class="card agent-result hidden">
-        <div class="agent-result-header">
-          <div>
-            <h2 id="agent-result-title">诊断结果</h2>
-            <p id="agent-result-meta" class="meta"></p>
-          </div>
-        </div>
-        <div id="agent-result-content"></div>
       </section>
     </main>
   </div>

@@ -106,6 +106,22 @@ crow::json::wvalue make_submission_json(const AiSubmissionContext& submission) {
     return body;
 }
 
+crow::json::wvalue::list make_history_json(
+    const std::vector<AiMessageRecord>& messages,
+    std::size_t max_items) {
+    crow::json::wvalue::list history;
+    const auto start = messages.size() > max_items ? messages.size() - max_items : 0;
+    for (std::size_t i = start; i < messages.size(); ++i) {
+        const auto& message = messages[i];
+        crow::json::wvalue item;
+        item["round_no"] = message.round_no;
+        item["user_content"] = message.user_content;
+        item["assistant_content"] = message.assistant_content;
+        history.push_back(std::move(item));
+    }
+    return history;
+}
+
 } // namespace
 
 AssistantDiagnosisResult AiAssistantService::diagnose(
@@ -323,6 +339,124 @@ AssistantDiagnosisResult AiAssistantService::diagnose_stream(
     ConversationRepository conversation_repository;
     const auto stored =
         conversation_repository.create_conversation_with_first_message(create_request);
+
+    return AssistantDiagnosisResult{
+        stored.conversation_id,
+        stored.message_id,
+        stored.round_no,
+        std::move(diagnosis),
+    };
+}
+
+AssistantDiagnosisResult AiAssistantService::continue_diagnosis_stream(
+    const AuthenticatedUser& user,
+    const AssistantConversationMessageRequest& request,
+    const ProgressCallback& progress,
+    const StreamEventCallback& stream_event) const {
+    if (progress) {
+        progress("validating", "正在校验诊断请求");
+    }
+    if (request.conversation_id.empty()) {
+        throw std::runtime_error("conversation_id is required");
+    }
+    if (request.hint_level < 1 || request.hint_level > 3) {
+        throw std::runtime_error("hint_level must be 1, 2 or 3");
+    }
+
+    AuthService auth_service;
+    const auto user_id = auth_service.find_user_id(user.username);
+    if (!user_id) {
+        throw std::runtime_error("user not found");
+    }
+
+    ConversationRepository conversation_repository;
+    const auto detail =
+        conversation_repository.find_for_user(*user_id, request.conversation_id);
+    if (!detail) {
+        throw std::runtime_error("conversation not found or not accessible");
+    }
+    if (!detail->conversation.submission_id || detail->conversation.submission_id->empty()) {
+        throw std::runtime_error("conversation has no submission context");
+    }
+
+    if (progress) {
+        progress("loading_problem", "正在读取题目信息");
+    }
+    ProblemRepository problem_repository;
+    const auto problem = problem_repository.find_detail(detail->conversation.problem_id);
+    if (!problem) {
+        throw std::runtime_error("problem not found");
+    }
+
+    if (progress) {
+        progress("loading_submission", "正在读取你的提交记录");
+    }
+    SubmissionRepository submission_repository;
+    const auto submission = submission_repository.find_ai_submission_for_user(
+        *user_id,
+        *detail->conversation.submission_id);
+    if (!submission) {
+        throw std::runtime_error("submission not found or not accessible");
+    }
+    if (submission->problem_id != detail->conversation.problem_id) {
+        throw std::runtime_error("submission does not belong to conversation problem");
+    }
+
+    const auto request_id = make_id("req");
+    crow::json::wvalue payload;
+    payload["user"]["user_id"] = *user_id;
+    payload["problem"] = make_problem_json(*problem);
+    payload["submission"] = make_submission_json(*submission);
+    payload["conversation"]["conversation_id"] = request.conversation_id;
+    payload["conversation"]["history"] = make_history_json(detail->messages, 8);
+    payload["hint_level"] = request.hint_level;
+    payload["question"] = request.question;
+
+    if (progress) {
+        progress("retrieving_knowledge", "正在查询本地知识库");
+    }
+    AgentClient agent_client;
+    const auto started_at = std::chrono::steady_clock::now();
+    if (progress) {
+        progress("generating", "正在调用模型流式生成中文诊断");
+    }
+    auto diagnosis = agent_client.create_diagnosis_stream(
+        request_id,
+        payload,
+        stream_event);
+    const auto latency_ms = static_cast<int>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - started_at)
+            .count());
+
+    const auto message_id = make_id("msg");
+
+    AppendConversationMessageRequest append_request;
+    append_request.conversation_id = request.conversation_id;
+    append_request.message_id = message_id;
+    append_request.user_id = *user_id;
+    append_request.problem_id = detail->conversation.problem_id;
+    append_request.submission_db_id = submission->submission_db_id;
+    append_request.submission_id = submission->submission_id;
+    append_request.title = detail->conversation.title;
+    append_request.hint_level = request.hint_level;
+    append_request.request_id = diagnosis.request_id.empty() ? request_id : diagnosis.request_id;
+    append_request.user_content = request.question.empty() ? "请继续诊断这次提交。" : request.question;
+    append_request.assistant_content = build_assistant_content(diagnosis);
+    append_request.model = diagnosis.model;
+    append_request.provider = diagnosis.provider;
+    append_request.finish_reason = "";
+    append_request.latency_ms = latency_ms;
+    append_request.knowledge_points_text = join_text(diagnosis.knowledge_points, ",");
+    append_request.sources_json = build_sources_json(diagnosis.sources);
+    append_request.safety_flags_json = "{}";
+    append_request.error_type = diagnosis.error_type;
+    append_request.confidence = diagnosis.confidence;
+
+    if (progress) {
+        progress("saving", "正在写入对话数据库");
+    }
+    const auto stored = conversation_repository.append_message(append_request);
 
     return AssistantDiagnosisResult{
         stored.conversation_id,
