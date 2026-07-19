@@ -11,6 +11,10 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 class Settings(BaseModel):
     internal_api_token: str = ""
+    oj_server_base_url: str = "http://127.0.0.1:8080"
+    oj_internal_api_token: str = ""
+    oj_connect_timeout_seconds: float = 5
+    oj_read_timeout_seconds: float = 15
     openrouter_api_key: str = ""
     chat_model: str = "deepseek/deepseek-v4-flash"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -20,6 +24,13 @@ class Settings(BaseModel):
 def get_settings() -> Settings:
     return Settings(
         internal_api_token=os.getenv("INTERNAL_API_TOKEN", ""),
+        oj_server_base_url=os.getenv("OJ_SERVER_BASE_URL", "http://127.0.0.1:8080"),
+        oj_internal_api_token=os.getenv(
+            "OJ_INTERNAL_API_TOKEN",
+            os.getenv("INTERNAL_API_TOKEN", ""),
+        ),
+        oj_connect_timeout_seconds=float(os.getenv("OJ_CONNECT_TIMEOUT_SECONDS", "5")),
+        oj_read_timeout_seconds=float(os.getenv("OJ_READ_TIMEOUT_SECONDS", "15")),
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
         chat_model=os.getenv("CHAT_MODEL", "deepseek/deepseek-v4-flash"),
         openrouter_base_url=os.getenv(

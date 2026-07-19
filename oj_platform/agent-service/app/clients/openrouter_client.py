@@ -19,6 +19,9 @@ class StructuredLLMResult(BaseModel, Generic[T]):
 
 
 class OpenRouterClient:
+    def settings_chat_model(self) -> str:
+        return get_settings().chat_model
+
     async def stream_text(
         self,
         messages: list[dict[str, str]],
