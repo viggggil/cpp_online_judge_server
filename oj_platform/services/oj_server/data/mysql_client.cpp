@@ -179,6 +179,20 @@ void MySqlClient::ensure_schema_upgrades(sql::Connection& connection) const {
         return result->next() && result->getInt("cnt") > 0;
     };
 
+    auto is_nullable_column = [&](const std::string& table_name, const std::string& column_name) {
+        auto statement = std::unique_ptr<sql::PreparedStatement>{
+            connection.prepareStatement(
+                "SELECT IS_NULLABLE "
+                "FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?")
+        };
+        statement->setString(1, config_.database);
+        statement->setString(2, table_name);
+        statement->setString(3, column_name);
+        auto result = std::unique_ptr<sql::ResultSet>{statement->executeQuery()};
+        return result->next() && result->getString("IS_NULLABLE") == "YES";
+    };
+
     auto statement = std::unique_ptr<sql::Statement>{connection.createStatement()};
 
     if (!has_column("submissions", "assignment_id")) {
@@ -243,7 +257,7 @@ void MySqlClient::ensure_schema_upgrades(sql::Connection& connection) const {
         "id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, "
         "conversation_id VARCHAR(64) NOT NULL, "
         "user_id BIGINT NOT NULL, "
-        "problem_id BIGINT NOT NULL, "
+        "problem_id BIGINT NULL, "
         "submission_db_id BIGINT NULL, "
         "submission_id VARCHAR(64) NULL, "
         "title VARCHAR(255) NOT NULL DEFAULT '', "
@@ -263,7 +277,7 @@ void MySqlClient::ensure_schema_upgrades(sql::Connection& connection) const {
         "ON DELETE CASCADE ON UPDATE CASCADE, "
         "CONSTRAINT fk_ai_conversation_problem "
         "FOREIGN KEY (problem_id) REFERENCES problems(id) "
-        "ON DELETE CASCADE ON UPDATE CASCADE, "
+        "ON DELETE SET NULL ON UPDATE CASCADE, "
         "CONSTRAINT fk_ai_conversation_submission "
         "FOREIGN KEY (submission_db_id) REFERENCES submissions(id) "
         "ON DELETE SET NULL ON UPDATE CASCADE"
@@ -302,6 +316,26 @@ void MySqlClient::ensure_schema_upgrades(sql::Connection& connection) const {
         "FOREIGN KEY (conversation_db_id) REFERENCES ai_conversation(id) "
         "ON DELETE CASCADE ON UPDATE CASCADE"
         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    if (has_column("ai_conversation", "problem_id") &&
+        !is_nullable_column("ai_conversation", "problem_id")) {
+        if (has_foreign_key("ai_conversation", "fk_ai_conversation_problem")) {
+            statement->execute(
+                "ALTER TABLE ai_conversation "
+                "DROP FOREIGN KEY fk_ai_conversation_problem");
+        }
+        statement->execute(
+            "ALTER TABLE ai_conversation "
+            "MODIFY COLUMN problem_id BIGINT NULL");
+    }
+
+    if (!has_foreign_key("ai_conversation", "fk_ai_conversation_problem")) {
+        statement->execute(
+            "ALTER TABLE ai_conversation "
+            "ADD CONSTRAINT fk_ai_conversation_problem "
+            "FOREIGN KEY (problem_id) REFERENCES problems(id) "
+            "ON DELETE SET NULL ON UPDATE CASCADE");
+    }
 }
 
 // 建立一条新的 MySQL 连接，并完成建库、选库与会话初始化。

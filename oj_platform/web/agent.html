@@ -12,7 +12,7 @@
       <div class="page-header-row">
         <div>
           <h1>Agent</h1>
-          <p>选择一次自己的提交，向 AI 辅导助手提问</p>
+          <p>开启新对话或继续历史会话，向 AI 编程学习助手提问</p>
         </div>
         <nav class="top-nav top-nav-primary">
           <a class="button nav-button nav-button-inactive" href="/">首页</a>
@@ -30,7 +30,7 @@
       <section class="card agent-chat-shell">
         <div class="agent-chat-topbar">
           <div id="agent-submission-picker" class="agent-mode-picker agent-chat-picker agent-mode-active">
-            <label class="label" for="agent-submission-select">选择提交创建新对话</label>
+            <label class="label" for="agent-submission-select">开启新对话（提交可选）</label>
             <select id="agent-submission-select" class="input"></select>
           </div>
 
@@ -51,7 +51,7 @@
             <option value="2" selected>Level 2</option>
             <option value="3">Level 3</option>
           </select>
-          <textarea id="agent-question-input" class="input agent-question-input" rows="1" placeholder="询问这次提交的问题..."></textarea>
+          <textarea id="agent-question-input" class="input agent-question-input" rows="1" placeholder="问算法、题目思路、提交问题或继续追问..."></textarea>
           <button id="agent-submit-btn" class="button" type="button">发送</button>
         </div>
       </section>

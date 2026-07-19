@@ -24,12 +24,16 @@ std::string make_id(const std::string& prefix) {
 
 std::string truncate_title(const std::string& value) {
     if (value.empty()) {
-        return "AI 诊断";
+        return "AI 助手";
     }
     if (value.size() <= 120) {
         return value;
     }
     return value.substr(0, 120);
+}
+
+std::string default_user_message(const std::string& message) {
+    return message.empty() ? "你好，我想问一个编程问题。" : message;
 }
 
 std::string join_text(const std::vector<std::string>& items, const std::string& separator) {
@@ -68,6 +72,37 @@ std::string build_sources_json(const std::vector<AgentSourceReference>& sources)
         items.push_back(std::move(item));
     }
     return crow::json::wvalue(std::move(items)).dump();
+}
+
+crow::json::wvalue make_chat_payload(
+    std::int64_t user_id,
+    const std::optional<std::int64_t>& problem_id,
+    const std::optional<std::string>& submission_id,
+    const std::string& conversation_id,
+    crow::json::wvalue::list history,
+    int hint_level,
+    const std::string& message) {
+    crow::json::wvalue payload;
+    payload["user"]["user_id"] = user_id;
+    if (conversation_id.empty()) {
+        payload["conversation"]["conversation_id"] = nullptr;
+    } else {
+        payload["conversation"]["conversation_id"] = conversation_id;
+    }
+    payload["conversation"]["history"] = std::move(history);
+    if (problem_id) {
+        payload["initial_context"]["problem_id"] = *problem_id;
+    } else {
+        payload["initial_context"]["problem_id"] = nullptr;
+    }
+    if (submission_id && !submission_id->empty()) {
+        payload["initial_context"]["submission_id"] = *submission_id;
+    } else {
+        payload["initial_context"]["submission_id"] = nullptr;
+    }
+    payload["hint_level"] = hint_level;
+    payload["message"] = message;
+    return payload;
 }
 
 crow::json::wvalue make_problem_json(const oj::protocol::ProblemDetail& problem) {
@@ -378,12 +413,15 @@ AssistantDiagnosisResult AiAssistantService::continue_diagnosis_stream(
     if (!detail->conversation.submission_id || detail->conversation.submission_id->empty()) {
         throw std::runtime_error("conversation has no submission context");
     }
+    if (!detail->conversation.problem_id) {
+        throw std::runtime_error("conversation has no problem context");
+    }
 
     if (progress) {
         progress("loading_problem", "正在读取题目信息");
     }
     ProblemRepository problem_repository;
-    const auto problem = problem_repository.find_detail(detail->conversation.problem_id);
+    const auto problem = problem_repository.find_detail(*detail->conversation.problem_id);
     if (!problem) {
         throw std::runtime_error("problem not found");
     }
@@ -398,7 +436,7 @@ AssistantDiagnosisResult AiAssistantService::continue_diagnosis_stream(
     if (!submission) {
         throw std::runtime_error("submission not found or not accessible");
     }
-    if (submission->problem_id != detail->conversation.problem_id) {
+    if (submission->problem_id != *detail->conversation.problem_id) {
         throw std::runtime_error("submission does not belong to conversation problem");
     }
 
@@ -463,6 +501,226 @@ AssistantDiagnosisResult AiAssistantService::continue_diagnosis_stream(
         stored.message_id,
         stored.round_no,
         std::move(diagnosis),
+    };
+}
+
+AssistantChatResult AiAssistantService::start_chat_stream(
+    const AuthenticatedUser& user,
+    const AssistantChatRequest& request,
+    const ProgressCallback& progress,
+    const StreamEventCallback& stream_event) const {
+    if (progress) {
+        progress("validating", "正在校验对话请求");
+    }
+    if (request.hint_level < 1 || request.hint_level > 3) {
+        throw std::runtime_error("hint_level must be 1, 2 or 3");
+    }
+    if (request.message.empty()) {
+        throw std::runtime_error("message is required");
+    }
+
+    AuthService auth_service;
+    const auto user_id = auth_service.find_user_id(user.username);
+    if (!user_id) {
+        throw std::runtime_error("user not found");
+    }
+
+    std::optional<std::int64_t> problem_id = request.problem_id;
+    std::optional<std::int64_t> submission_db_id;
+    std::optional<std::string> submission_id = request.submission_id;
+
+    if (problem_id && *problem_id <= 0) {
+        throw std::runtime_error("problem_id must be positive");
+    }
+
+    if (submission_id && !submission_id->empty()) {
+        if (progress) {
+            progress("loading_submission", "正在读取你的提交记录");
+        }
+        SubmissionRepository submission_repository;
+        const auto submission =
+            submission_repository.find_ai_submission_for_user(*user_id, *submission_id);
+        if (!submission) {
+            throw std::runtime_error("submission not found or not accessible");
+        }
+        if (problem_id && submission->problem_id != *problem_id) {
+            throw std::runtime_error("submission does not belong to problem");
+        }
+        problem_id = submission->problem_id;
+        submission_db_id = submission->submission_db_id;
+        submission_id = submission->submission_id;
+    }
+
+    if (problem_id) {
+        if (progress) {
+            progress("loading_problem", "正在读取题目信息");
+        }
+        ProblemRepository problem_repository;
+        if (!problem_repository.find_detail(*problem_id)) {
+            throw std::runtime_error("problem not found");
+        }
+    }
+
+    const auto request_id = make_id("req");
+    auto payload = make_chat_payload(
+        *user_id,
+        problem_id,
+        submission_id,
+        "",
+        crow::json::wvalue::list{},
+        request.hint_level,
+        request.message);
+
+    AgentClient agent_client;
+    const auto started_at = std::chrono::steady_clock::now();
+    if (progress) {
+        progress("generating", "正在调用模型流式生成回答");
+    }
+    auto chat = agent_client.create_chat_stream(
+        request_id,
+        payload,
+        stream_event);
+    const auto latency_ms = static_cast<int>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - started_at)
+            .count());
+
+    if (chat.problem_id) {
+        problem_id = chat.problem_id;
+    }
+    if (chat.submission_id && !chat.submission_id->empty()) {
+        submission_id = chat.submission_id;
+    }
+
+    const auto conversation_id = make_id("conv");
+    const auto message_id = make_id("msg");
+
+    CreateConversationWithMessageRequest create_request;
+    create_request.conversation_id = conversation_id;
+    create_request.message_id = message_id;
+    create_request.user_id = *user_id;
+    create_request.problem_id = problem_id;
+    create_request.submission_db_id = submission_db_id;
+    create_request.submission_id = submission_id;
+    create_request.title = truncate_title(request.message);
+    create_request.hint_level = request.hint_level;
+    create_request.request_id = chat.request_id.empty() ? request_id : chat.request_id;
+    create_request.user_content = default_user_message(request.message);
+    create_request.assistant_content = chat.answer;
+    create_request.model = chat.model;
+    create_request.provider = chat.provider;
+    create_request.finish_reason = "";
+    create_request.latency_ms = latency_ms;
+    create_request.knowledge_points_text = join_text(chat.knowledge_points, ",");
+    create_request.sources_json = chat.raw_done_json.empty() ? build_sources_json(chat.sources) : chat.raw_done_json;
+    create_request.safety_flags_json = chat.safety_flags_json;
+    create_request.error_type = chat.intent;
+    create_request.confidence = std::nullopt;
+
+    if (progress) {
+        progress("saving", "正在写入对话数据库");
+    }
+    ConversationRepository conversation_repository;
+    const auto stored =
+        conversation_repository.create_conversation_with_first_message(create_request);
+
+    return AssistantChatResult{
+        stored.conversation_id,
+        stored.message_id,
+        stored.round_no,
+        std::move(chat),
+    };
+}
+
+AssistantChatResult AiAssistantService::continue_chat_stream(
+    const AuthenticatedUser& user,
+    const AssistantChatMessageRequest& request,
+    const ProgressCallback& progress,
+    const StreamEventCallback& stream_event) const {
+    if (progress) {
+        progress("validating", "正在校验对话请求");
+    }
+    if (request.conversation_id.empty()) {
+        throw std::runtime_error("conversation_id is required");
+    }
+    if (request.hint_level < 1 || request.hint_level > 3) {
+        throw std::runtime_error("hint_level must be 1, 2 or 3");
+    }
+    if (request.message.empty()) {
+        throw std::runtime_error("message is required");
+    }
+
+    AuthService auth_service;
+    const auto user_id = auth_service.find_user_id(user.username);
+    if (!user_id) {
+        throw std::runtime_error("user not found");
+    }
+
+    ConversationRepository conversation_repository;
+    const auto detail =
+        conversation_repository.find_for_user(*user_id, request.conversation_id);
+    if (!detail) {
+        throw std::runtime_error("conversation not found or not accessible");
+    }
+
+    const auto request_id = make_id("req");
+    auto payload = make_chat_payload(
+        *user_id,
+        detail->conversation.problem_id,
+        detail->conversation.submission_id,
+        request.conversation_id,
+        make_history_json(detail->messages, 8),
+        request.hint_level,
+        request.message);
+
+    AgentClient agent_client;
+    const auto started_at = std::chrono::steady_clock::now();
+    if (progress) {
+        progress("generating", "正在调用模型流式生成回答");
+    }
+    auto chat = agent_client.create_chat_stream(
+        request_id,
+        payload,
+        stream_event);
+    const auto latency_ms = static_cast<int>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - started_at)
+            .count());
+
+    const auto message_id = make_id("msg");
+
+    AppendConversationMessageRequest append_request;
+    append_request.conversation_id = request.conversation_id;
+    append_request.message_id = message_id;
+    append_request.user_id = *user_id;
+    append_request.problem_id = chat.problem_id ? chat.problem_id : detail->conversation.problem_id;
+    append_request.submission_db_id = detail->conversation.submission_db_id;
+    append_request.submission_id = chat.submission_id ? chat.submission_id : detail->conversation.submission_id;
+    append_request.title = detail->conversation.title;
+    append_request.hint_level = request.hint_level;
+    append_request.request_id = chat.request_id.empty() ? request_id : chat.request_id;
+    append_request.user_content = request.message;
+    append_request.assistant_content = chat.answer;
+    append_request.model = chat.model;
+    append_request.provider = chat.provider;
+    append_request.finish_reason = "";
+    append_request.latency_ms = latency_ms;
+    append_request.knowledge_points_text = join_text(chat.knowledge_points, ",");
+    append_request.sources_json = chat.raw_done_json.empty() ? build_sources_json(chat.sources) : chat.raw_done_json;
+    append_request.safety_flags_json = chat.safety_flags_json;
+    append_request.error_type = chat.intent;
+    append_request.confidence = std::nullopt;
+
+    if (progress) {
+        progress("saving", "正在写入对话数据库");
+    }
+    const auto stored = conversation_repository.append_message(append_request);
+
+    return AssistantChatResult{
+        stored.conversation_id,
+        stored.message_id,
+        stored.round_no,
+        std::move(chat),
     };
 }
 

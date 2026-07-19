@@ -43,6 +43,7 @@ struct AiInternalApiConfig {
 struct AgentServiceConfig {
     const char* base_url{env_or_default("OJ_AGENT_BASE_URL", "http://127.0.0.1:8001")};
     const char* diagnoses_api_path{env_or_default("OJ_AGENT_DIAGNOSES_API_PATH", "/api/v1/diagnoses")};
+    const char* chat_api_path{env_or_default("OJ_AGENT_CHAT_API_PATH", "/api/v1/chat")};
     const char* internal_token{
         env_or_default(
             "OJ_INTERNAL_API_TOKEN",

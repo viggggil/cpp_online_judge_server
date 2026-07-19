@@ -12,7 +12,7 @@ namespace oj::server {
 struct AiConversationSummary {
     std::string conversation_id;
     std::int64_t user_id{0};
-    std::int64_t problem_id{0};
+    std::optional<std::int64_t> problem_id;
     std::optional<std::int64_t> submission_db_id;
     std::optional<std::string> submission_id;
     std::string title;
@@ -55,7 +55,7 @@ struct CreateConversationWithMessageRequest {
     std::string conversation_id;
     std::string message_id;
     std::int64_t user_id{0};
-    std::int64_t problem_id{0};
+    std::optional<std::int64_t> problem_id;
     std::optional<std::int64_t> submission_db_id;
     std::optional<std::string> submission_id;
     std::string title;

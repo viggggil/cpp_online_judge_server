@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -42,6 +43,23 @@ struct AgentDiagnosisResponse {
     std::int64_t generated_at{0};
 };
 
+struct AgentChatResponse {
+    std::string request_id;
+    std::int64_t user_id{0};
+    std::optional<std::int64_t> problem_id;
+    std::optional<std::string> submission_id;
+    std::string answer;
+    std::string intent;
+    std::vector<std::string> knowledge_points;
+    std::vector<AgentSourceReference> sources;
+    std::string sources_json;
+    std::string safety_flags_json;
+    std::string raw_done_json;
+    std::string model;
+    std::string provider;
+    std::int64_t generated_at{0};
+};
+
 class AgentClient {
 public:
     using StreamEventCallback = std::function<void(std::string_view event, std::string_view data_json)>;
@@ -54,6 +72,11 @@ public:
         const crow::json::wvalue& payload) const;
 
     AgentDiagnosisResponse create_diagnosis_stream(
+        const std::string& request_id,
+        const crow::json::wvalue& payload,
+        const StreamEventCallback& event_callback) const;
+
+    AgentChatResponse create_chat_stream(
         const std::string& request_id,
         const crow::json::wvalue& payload,
         const StreamEventCallback& event_callback) const;

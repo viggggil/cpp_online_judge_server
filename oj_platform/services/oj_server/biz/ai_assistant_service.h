@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -24,11 +25,31 @@ struct AssistantConversationMessageRequest {
     std::string question;
 };
 
+struct AssistantChatRequest {
+    std::optional<std::int64_t> problem_id;
+    std::optional<std::string> submission_id;
+    int hint_level{2};
+    std::string message;
+};
+
+struct AssistantChatMessageRequest {
+    std::string conversation_id;
+    int hint_level{2};
+    std::string message;
+};
+
 struct AssistantDiagnosisResult {
     std::string conversation_id;
     std::string message_id;
     int round_no{1};
     AgentDiagnosisResponse diagnosis;
+};
+
+struct AssistantChatResult {
+    std::string conversation_id;
+    std::string message_id;
+    int round_no{1};
+    AgentChatResponse chat;
 };
 
 class AiAssistantService {
@@ -50,6 +71,18 @@ public:
     AssistantDiagnosisResult continue_diagnosis_stream(
         const AuthenticatedUser& user,
         const AssistantConversationMessageRequest& request,
+        const ProgressCallback& progress,
+        const StreamEventCallback& stream_event) const;
+
+    AssistantChatResult start_chat_stream(
+        const AuthenticatedUser& user,
+        const AssistantChatRequest& request,
+        const ProgressCallback& progress,
+        const StreamEventCallback& stream_event) const;
+
+    AssistantChatResult continue_chat_stream(
+        const AuthenticatedUser& user,
+        const AssistantChatMessageRequest& request,
         const ProgressCallback& progress,
         const StreamEventCallback& stream_event) const;
 };

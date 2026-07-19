@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS ai_conversation (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     conversation_id VARCHAR(64) NOT NULL,
     user_id BIGINT NOT NULL,
-    problem_id BIGINT NOT NULL,
+    problem_id BIGINT NULL,
     submission_db_id BIGINT NULL,
     submission_id VARCHAR(64) NULL,
     title VARCHAR(255) NOT NULL DEFAULT '',
@@ -177,7 +177,7 @@ CREATE TABLE IF NOT EXISTS ai_conversation (
 
     CONSTRAINT fk_ai_conversation_problem
         FOREIGN KEY (problem_id) REFERENCES problems(id)
-        ON DELETE CASCADE
+        ON DELETE SET NULL
         ON UPDATE CASCADE,
 
     CONSTRAINT fk_ai_conversation_submission

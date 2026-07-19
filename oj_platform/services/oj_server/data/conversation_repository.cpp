@@ -16,7 +16,9 @@ AiConversationSummary build_conversation_summary(sql::ResultSet& row) {
     AiConversationSummary item;
     item.conversation_id = row.getString("conversation_id");
     item.user_id = row.getInt64("user_id");
-    item.problem_id = row.getInt64("problem_id");
+    if (!row.isNull("problem_id")) {
+        item.problem_id = row.getInt64("problem_id");
+    }
     if (!row.isNull("submission_db_id")) {
         item.submission_db_id = row.getInt64("submission_db_id");
     }
@@ -193,7 +195,11 @@ StoredConversationMessage ConversationRepository::create_conversation_with_first
         };
         conversation_statement->setString(1, request.conversation_id);
         conversation_statement->setInt64(2, request.user_id);
-        conversation_statement->setInt64(3, request.problem_id);
+        if (request.problem_id) {
+            conversation_statement->setInt64(3, *request.problem_id);
+        } else {
+            conversation_statement->setNull(3, sql::DataType::BIGINT);
+        }
         if (request.submission_db_id) {
             conversation_statement->setInt64(4, *request.submission_db_id);
         } else {

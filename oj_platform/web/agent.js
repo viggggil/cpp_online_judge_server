@@ -103,25 +103,13 @@ function formatSourceLine(source) {
   return `${title}${source.knowledge_point ? `，${source.knowledge_point}` : ''}${score}`;
 }
 
-function formatFinalDiagnosis(data) {
+function formatFinalChat(data) {
   const lines = [];
-  if (data.summary) {
-    lines.push(data.summary);
-  }
-  if (data.analysis) {
-    lines.push(`分析：\n${data.analysis}`);
-  }
-  if (Array.isArray(data.evidence) && data.evidence.length) {
-    lines.push(`证据：\n${data.evidence.map((item) => `- ${item}`).join('\n')}`);
-  }
-  if (Array.isArray(data.knowledge_points) && data.knowledge_points.length) {
-    lines.push(`知识点：\n${data.knowledge_points.map((item) => `- ${item}`).join('\n')}`);
-  }
-  if (Array.isArray(data.hints) && data.hints.length) {
-    lines.push(`提示：\n${data.hints.map((item) => `- ${item}`).join('\n')}`);
+  if (data.answer) {
+    lines.push(data.answer);
   }
   if (Array.isArray(data.sources) && data.sources.length) {
-    lines.push(`知识库来源：\n${data.sources.map((source) => `- ${formatSourceLine(source)}`).join('\n')}`);
+    lines.push(`资料来源：\n${data.sources.map((source) => `- ${formatSourceLine(source)}`).join('\n')}`);
   }
   lines.push(`模型：${data.model || '-'}${data.provider ? ` ｜ ${data.provider}` : ''}`);
   lines.push(`会话：${data.conversation_id || '-'} ｜ 消息：${data.message_id || '-'}`);
@@ -145,13 +133,14 @@ function renderSubmissions(submissions) {
   const select = document.getElementById('agent-submission-select');
   select.innerHTML = '';
 
+  const emptyOption = document.createElement('option');
+  emptyOption.value = '';
+  emptyOption.textContent = '不绑定提交，直接开启新对话';
+  select.appendChild(emptyOption);
+
   if (!submissions.length) {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = '暂无提交记录';
-    select.appendChild(option);
-    select.disabled = true;
-    document.getElementById('agent-submit-btn').disabled = true;
+    select.disabled = false;
+    document.getElementById('agent-submit-btn').disabled = false;
     return;
   }
 
@@ -171,12 +160,13 @@ function renderConversations(conversations) {
   const select = document.getElementById('agent-conversation-select');
   select.innerHTML = '';
 
+  const newOption = document.createElement('option');
+  newOption.value = '';
+  newOption.textContent = '开启新对话';
+  select.appendChild(newOption);
+
   if (!conversations.length) {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = '暂无历史会话';
-    select.appendChild(option);
-    select.disabled = true;
+    select.disabled = false;
     document.getElementById('agent-load-conversation-btn').disabled = true;
     return;
   }
@@ -187,8 +177,9 @@ function renderConversations(conversations) {
   for (const item of conversations) {
     const option = document.createElement('option');
     option.value = item.conversation_id;
+    const problemText = item.problem_id ? `题号 ${item.problem_id}` : '未绑定题目';
     option.textContent =
-      `${item.title || item.conversation_id} ｜ 题号 ${item.problem_id} ｜ ${item.round_count || 0} 轮 ｜ ${agentFormatTimestamp(item.updated_at)}`;
+      `${item.title || item.conversation_id} ｜ ${problemText} ｜ ${item.round_count || 0} 轮 ｜ ${agentFormatTimestamp(item.updated_at)}`;
     select.appendChild(option);
   }
 
@@ -279,7 +270,7 @@ function shouldShowStatus(stage, message) {
 
   return ![
     '正在查询本地知识库',
-    '正在调用模型流式生成中文诊断',
+    '正在调用模型流式生成回答',
   ].includes(message);
 }
 
@@ -295,13 +286,8 @@ async function submitAgentQuestion() {
     appendChatMessage('assistant', '请先输入你的问题');
     return;
   }
-  if (agentMode === 'new_conversation' && !submission) {
-    appendChatMessage('assistant', '请先选择一次提交');
-    return;
-  }
   if (agentMode === 'continue_conversation' && !conversationId) {
-    appendChatMessage('assistant', '请先选择一个历史会话');
-    return;
+    setAgentMode('new_conversation');
   }
 
   button.disabled = true;
@@ -310,7 +296,7 @@ async function submitAgentQuestion() {
     'user',
     question,
     agentMode === 'new_conversation'
-      ? submission.label
+      ? (submission ? submission.label : '新对话')
       : `继续会话 ${conversationId}`,
   );
   const assistantMessage = appendChatMessage('assistant', '', 'AI');
@@ -319,19 +305,18 @@ async function submitAgentQuestion() {
 
   try {
     const endpoint = agentMode === 'new_conversation'
-      ? '/api/assistant/diagnoses/stream'
-      : `/api/assistant/conversations/${encodeURIComponent(conversationId)}/messages/stream`;
-    const requestBody = agentMode === 'new_conversation'
-      ? {
-          problem_id: submission.problem_id,
-          submission_id: submission.submission_id,
-          hint_level: hintLevel,
-          question,
-        }
-      : {
-          hint_level: hintLevel,
-          question,
-        };
+      ? '/api/assistant/chat/stream'
+      : `/api/assistant/conversations/${encodeURIComponent(conversationId)}/chat/stream`;
+    const requestBody = {
+      hint_level: hintLevel,
+      message: question,
+    };
+    if (agentMode === 'new_conversation' && submission) {
+      requestBody.context = {
+        problem_id: submission.problem_id,
+        submission_id: submission.submission_id,
+      };
+    }
 
     const response = await window.ojAuth.authFetch(endpoint, {
       method: 'POST',
@@ -340,7 +325,7 @@ async function submitAgentQuestion() {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || '创建诊断任务失败');
+      throw new Error(data.error || '创建对话任务失败');
     }
 
     let lastEventId = 0;
@@ -350,11 +335,11 @@ async function submitAgentQuestion() {
     while (!finished) {
       await sleep(pollIntervalMs);
       const eventsResponse = await window.ojAuth.authFetch(
-        `/api/assistant/diagnoses/stream/${encodeURIComponent(data.job_id)}/events?after=${lastEventId}`,
+        `/api/assistant/chat/jobs/${encodeURIComponent(data.job_id)}/events?after=${lastEventId}`,
       );
       const eventsData = await eventsResponse.json();
       if (!eventsResponse.ok) {
-        throw new Error(eventsData.error || '读取诊断进度失败');
+        throw new Error(eventsData.error || '读取对话进度失败');
       }
 
       for (const event of eventsData.events || []) {
@@ -363,7 +348,13 @@ async function submitAgentQuestion() {
 
         if (event.event === 'status') {
           if (shouldShowStatus(eventData.stage, eventData.message)) {
-            appendToMessage(assistantMessage, eventData.message || eventData.stage || '诊断进行中', { paragraph: true });
+            appendToMessage(assistantMessage, eventData.message || eventData.stage || '对话进行中', { paragraph: true });
+          }
+        } else if (event.event === 'tool_call') {
+          appendToMessage(assistantMessage, `正在查询：${eventData.name || '工具'}`, { paragraph: true });
+        } else if (event.event === 'tool_result') {
+          if (eventData.summary) {
+            appendToMessage(assistantMessage, eventData.summary, { paragraph: true });
           }
         } else if (event.event === 'sources') {
           const sourceCount = Array.isArray(eventData.sources) ? eventData.sources.length : 0;
@@ -371,12 +362,12 @@ async function submitAgentQuestion() {
         } else if (event.event === 'delta') {
           appendToMessage(assistantMessage, eventData.content || '');
         } else if (event.event === 'done') {
-          setMessage(assistantMessage, formatFinalDiagnosis(eventData));
+          setMessage(assistantMessage, formatFinalChat(eventData));
           activeConversationId = eventData.conversation_id || activeConversationId;
           await loadAgentConversations();
           finished = true;
         } else if (event.event === 'error') {
-          throw new Error(eventData.message || '诊断失败');
+          throw new Error(eventData.message || '对话失败');
         }
       }
 
@@ -385,7 +376,7 @@ async function submitAgentQuestion() {
       }
     }
   } catch (error) {
-    appendToMessage(assistantMessage, error.message || '诊断失败', { paragraph: true });
+    appendToMessage(assistantMessage, error.message || '对话失败', { paragraph: true });
   } finally {
     button.disabled = false;
     input.disabled = false;
@@ -419,8 +410,12 @@ function bindModePickers() {
   submissionSelect.addEventListener('change', () => setAgentMode('new_conversation'));
   conversationSelect.addEventListener('focus', () => setAgentMode('continue_conversation'));
   conversationSelect.addEventListener('change', () => {
-    setAgentMode('continue_conversation');
     activeConversationId = conversationSelect.value;
+    if (!activeConversationId) {
+      setAgentMode('new_conversation');
+      return;
+    }
+    setAgentMode('continue_conversation');
     loadSelectedConversation().catch((error) => {
       appendChatMessage('assistant', error.message || '加载历史会话失败');
     });
@@ -449,7 +444,7 @@ async function initAgentPage() {
   try {
     await Promise.all([loadAgentSubmissions(), loadAgentConversations()]);
     clearChat();
-    appendChatMessage('assistant', '选择一次提交，输入问题后我会开始诊断。');
+    appendChatMessage('assistant', '可以直接开启新对话，也可以选择一次提交作为上下文。');
   } catch (error) {
     clearChat();
     appendChatMessage('assistant', error.message || '页面初始化失败');
