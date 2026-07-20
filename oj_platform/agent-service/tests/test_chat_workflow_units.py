@@ -2,7 +2,7 @@ import pytest
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel
 
-from app.schemas.chat import AgentChatRequest, ExecutedToolResult, PlannerToolCall
+from app.schemas.chat import AgentChatRequest, ConversationHistoryItem, ExecutedToolResult, PlannerToolCall
 from app.schemas.chat import InitialContext, PlannerPlan
 from app.schemas.oj import UserContext
 from app.services.planner_service import PlannerService
@@ -117,6 +117,7 @@ def test_planner_normalizes_common_tool_argument_aliases():
         message="看看这份提交",
     )
     plan = PlannerPlan(
+        rewritten_question="题目 1007 的栈相关思路",
         tool_calls=[
             PlannerToolCall(name="get_problem", arguments={"problemId": 1007}),
             PlannerToolCall(name="get_submission", arguments={"submissionId": "sub_1"}),
@@ -129,6 +130,7 @@ def test_planner_normalizes_common_tool_argument_aliases():
     assert normalized.tool_calls[0].arguments == {"problem_id": 1007}
     assert normalized.tool_calls[1].arguments == {"submission_id": "sub_1"}
     assert normalized.tool_calls[2].arguments == {"query": "栈", "problem_id": 1007}
+    assert normalized.rewritten_question == "题目 1007 的栈相关思路"
 
 
 def test_planner_fills_missing_context_arguments():
@@ -156,6 +158,7 @@ def test_planner_extracts_missing_problem_id_from_user_message():
         message="帮我看看1001这道题的核心思路",
     )
     plan = PlannerPlan(
+        rewritten_question="题目 1001 的图论核心思路",
         tool_calls=[
             PlannerToolCall(name="get_problem", arguments={}),
             PlannerToolCall(name="retrieve_knowledge", arguments={"query": "图论"}),
@@ -166,6 +169,7 @@ def test_planner_extracts_missing_problem_id_from_user_message():
 
     assert normalized.tool_calls[0].arguments == {"problem_id": 1001}
     assert normalized.tool_calls[1].arguments == {"query": "图论", "problem_id": 1001}
+    assert normalized.rewritten_question == "题目 1001 的图论核心思路"
 
 
 def test_planner_extracts_missing_submission_id_from_user_message():
@@ -182,6 +186,51 @@ def test_planner_extracts_missing_submission_id_from_user_message():
     normalized = PlannerService()._normalize_plan(request, plan, [])
 
     assert normalized.tool_calls[0].arguments == {"submission_id": "sub_abc123"}
+
+
+def test_planner_uses_rewritten_question_when_retrieve_query_is_missing():
+    request = AgentChatRequest(
+        user=UserContext(user_id=1001),
+        initial_context=InitialContext(problem_id=1001),
+        message="这个题为什么不能用二分？",
+    )
+    plan = PlannerPlan(
+        rewritten_question="题目 1001 为什么不能用二分",
+        tool_calls=[
+            PlannerToolCall(
+                name="retrieve_knowledge",
+                arguments={},
+            ),
+        ]
+    )
+
+    normalized = PlannerService()._normalize_plan(request, plan, [])
+
+    assert normalized.tool_calls[0].arguments == {
+        "query": "题目 1001 为什么不能用二分",
+        "problem_id": 1001,
+    }
+
+
+def test_planner_prompt_mentions_contextual_rewrite_for_multiturn_question():
+    request = AgentChatRequest(
+        user=UserContext(user_id=1001),
+        initial_context=InitialContext(problem_id=1001),
+        message="这个题为什么不能用二分？",
+    )
+    request.conversation.history.append(
+        ConversationHistoryItem(
+            round_no=1,
+            user_content="帮我看看 1001",
+            assistant_content="题目 1001 是连通性相关问题。",
+        )
+    )
+
+    messages = PromptService().build_planner_messages(request, ["- retrieve_knowledge"])
+
+    assert "rewritten_question" in messages[0]["content"]
+    assert "这个题" in messages[0]["content"]
+    assert "题目 1001 为什么不能用二分" in messages[0]["content"]
 
 
 def test_chat_workflow_fallback_tool_calls_extract_problem_id():

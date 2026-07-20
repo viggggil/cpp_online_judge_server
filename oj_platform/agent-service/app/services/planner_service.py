@@ -39,23 +39,28 @@ class PlannerService:
     ) -> PlannerPlan:
         allowed = {tool.name for tool in tools}
         normalized_calls: list[PlannerToolCall] = []
+        rewritten_question = (plan.rewritten_question or request.message).strip()
         for call in plan.tool_calls[:6]:
             arguments = _normalize_tool_arguments(
                 call.name,
                 call.arguments,
                 request,
             )
+            reason = call.reason[:300]
+            if call.name == "retrieve_knowledge" and not arguments.get("query"):
+                arguments["query"] = rewritten_question
             normalized_calls.append(
                 PlannerToolCall(
                     name=call.name if call.name in allowed else call.name,
                     arguments=arguments,
-                    reason=call.reason[:300],
+                    reason=reason,
                 )
             )
         return PlannerPlan(
             tool_calls=normalized_calls,
             answer_strategy=plan.answer_strategy[:500],
             intent=plan.intent[:64],
+            rewritten_question=rewritten_question[:1000],
         )
 
 

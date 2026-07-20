@@ -53,6 +53,7 @@ class PlannerPlan(BaseModel):
     tool_calls: list[PlannerToolCall] = Field(default_factory=list)
     answer_strategy: str = ""
     intent: str = ""
+    rewritten_question: str = ""
 
 
 class ToolCallRecord(BaseModel):

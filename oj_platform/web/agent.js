@@ -20,6 +20,7 @@ function sleep(ms) {
 
 let agentMode = 'new_conversation';
 let activeConversationId = '';
+let isSubmittingAgentQuestion = false;
 
 function setAgentMode(mode) {
   agentMode = mode;
@@ -312,6 +313,10 @@ function shouldShowStatus(stage, message) {
 }
 
 async function submitAgentQuestion() {
+  if (isSubmittingAgentQuestion) {
+    return;
+  }
+
   const input = document.getElementById('agent-question-input');
   const question = input.value.trim();
   const hintLevel = Number(document.getElementById('agent-hint-level').value || '2');
@@ -329,6 +334,7 @@ async function submitAgentQuestion() {
 
   button.disabled = true;
   input.disabled = true;
+  isSubmittingAgentQuestion = true;
   appendChatMessage(
     'user',
     question,
@@ -405,8 +411,14 @@ async function submitAgentQuestion() {
           appendToMessage(assistantMessage, eventData.content || '');
         } else if (event.event === 'done') {
           setMessage(assistantMessage, formatFinalChat(eventData));
-          activeConversationId = eventData.conversation_id || activeConversationId;
+          const completedConversationId = eventData.conversation_id || activeConversationId;
+          activeConversationId = completedConversationId;
           await loadAgentConversations();
+          if (completedConversationId) {
+            setAgentMode('continue_conversation');
+            const conversationSelect = document.getElementById('agent-conversation-select');
+            conversationSelect.value = completedConversationId;
+          }
           finished = true;
         } else if (event.event === 'error') {
           throw new Error(eventData.message || '对话失败');
@@ -420,6 +432,7 @@ async function submitAgentQuestion() {
   } catch (error) {
     appendToMessage(assistantMessage, error.message || '对话失败', { paragraph: true });
   } finally {
+    isSubmittingAgentQuestion = false;
     button.disabled = false;
     input.disabled = false;
     input.focus();

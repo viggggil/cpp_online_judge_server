@@ -255,6 +255,9 @@ submission_id: {submission.submission_id}
 5. 如果用户提到明确题号、提交编号或历史对话，可以按需调用对应工具。
 6. 最多规划 6 次工具调用。
 7. answer_strategy 用一句中文描述最终回答策略。
+8. rewritten_question 必须基于初始上下文和最近对话历史，重述用户本轮问题，让“这个题”“这份提交”“上一轮”等指代变成明确对象。
+9. 如果已知题号或提交号，rewritten_question 中要显式包含它们，例如“题目 1001 为什么不能用二分”“提交 sub_xxx WA 的可能原因”。
+10. 如果要调用 retrieve_knowledge，query 应使用 rewritten_question 或基于它压缩出的明确检索语句，不要直接照抄用户原话。
 """.strip(),
                 ),
                 (
@@ -330,6 +333,9 @@ user_id: {user_id}
 Planner 回答策略：
 {answer_strategy}
 
+Planner 重述后的本轮问题：
+{rewritten_question}
+
 <conversation_history>
 {history}
 </conversation_history>
@@ -354,6 +360,7 @@ Planner 回答策略：
         messages = prompt.format_messages(
             hint_policy=self._hint_policy(request.hint_level),
             answer_strategy=plan.answer_strategy or "根据已知上下文自然回答。",
+            rewritten_question=plan.rewritten_question or request.message,
             history=self._format_chat_history(request),
             initial_context=json.dumps(
                 request.initial_context.model_dump(),

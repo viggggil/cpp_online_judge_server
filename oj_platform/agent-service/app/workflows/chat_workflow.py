@@ -94,6 +94,7 @@ class ChatWorkflow:
                 tool_calls=_fallback_tool_calls(request),
                 answer_strategy="Planner 超时；根据用户问题和已有上下文直接回答。",
                 intent="planner_timeout_fallback",
+                rewritten_question=request.message,
             )
             yield sse_event(
                 "status",
@@ -112,6 +113,7 @@ class ChatWorkflow:
                 tool_calls=_fallback_tool_calls(request),
                 answer_strategy="Planner 暂时不可用；根据已有上下文直接回答。",
                 intent="planner_fallback",
+                rewritten_question=request.message,
             )
             yield sse_event(
                 "status",
@@ -253,6 +255,7 @@ class ChatWorkflow:
             tool_calls=[result.record for result in tool_results],
             metadata={
                 "answer_strategy": plan.answer_strategy,
+                "rewritten_question": plan.rewritten_question,
                 "safety_flags": safety_flags,
             },
             model=self.llm_client.settings_chat_model(),

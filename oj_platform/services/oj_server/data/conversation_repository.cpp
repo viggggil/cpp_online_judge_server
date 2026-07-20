@@ -345,14 +345,32 @@ StoredConversationMessage ConversationRepository::append_message(
         auto update_statement = std::unique_ptr<sql::PreparedStatement>{
             connection->prepareStatement(
                 "UPDATE ai_conversation "
-                "SET hint_level = ?, round_count = ?, last_message_at = ?, updated_at = ? "
+                "SET problem_id = COALESCE(?, problem_id), "
+                "submission_db_id = COALESCE(?, submission_db_id), "
+                "submission_id = COALESCE(?, submission_id), "
+                "hint_level = ?, round_count = ?, last_message_at = ?, updated_at = ? "
                 "WHERE id = ?")
         };
-        update_statement->setInt(1, request.hint_level);
-        update_statement->setInt(2, round_no);
-        update_statement->setInt64(3, now);
-        update_statement->setInt64(4, now);
-        update_statement->setInt64(5, conversation_db_id);
+        if (request.problem_id) {
+            update_statement->setInt64(1, *request.problem_id);
+        } else {
+            update_statement->setNull(1, sql::DataType::BIGINT);
+        }
+        if (request.submission_db_id) {
+            update_statement->setInt64(2, *request.submission_db_id);
+        } else {
+            update_statement->setNull(2, sql::DataType::BIGINT);
+        }
+        if (request.submission_id) {
+            update_statement->setString(3, *request.submission_id);
+        } else {
+            update_statement->setNull(3, sql::DataType::VARCHAR);
+        }
+        update_statement->setInt(4, request.hint_level);
+        update_statement->setInt(5, round_no);
+        update_statement->setInt64(6, now);
+        update_statement->setInt64(7, now);
+        update_statement->setInt64(8, conversation_db_id);
         update_statement->executeUpdate();
 
         connection->commit();
