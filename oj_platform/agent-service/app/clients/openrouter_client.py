@@ -22,6 +22,38 @@ class OpenRouterClient:
     def settings_chat_model(self) -> str:
         return get_settings().chat_model
 
+    def _headers(self) -> dict[str, str]:
+        settings = get_settings()
+        return {
+            "Authorization": f"Bearer {settings.openrouter_api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def _chat_payload(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float,
+        max_tokens: int,
+        stream: bool,
+    ) -> dict:
+        settings = get_settings()
+        payload = {
+            "model": settings.chat_model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": stream,
+            "reasoning": {
+                "effort": "none",
+                "exclude": True,
+            },
+        }
+        provider_sort = settings.openrouter_provider_sort.strip().lower()
+        if provider_sort in {"throughput", "latency", "price"}:
+            payload["provider"] = {"sort": provider_sort}
+        return payload
+
     async def stream_text(
         self,
         messages: list[dict[str, str]],
@@ -38,21 +70,13 @@ class OpenRouterClient:
                 async with client.stream(
                     "POST",
                     url,
-                    headers={
-                        "Authorization": f"Bearer {settings.openrouter_api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": settings.chat_model,
-                        "messages": messages,
-                        "temperature": 0.2,
-                        "max_tokens": 1400,
-                        "stream": True,
-                        "reasoning": {
-                            "effort": "none",
-                            "exclude": True,
-                        },
-                    },
+                    headers=self._headers(),
+                    json=self._chat_payload(
+                        messages,
+                        temperature=0.2,
+                        max_tokens=1400,
+                        stream=True,
+                    ),
                 ) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
@@ -60,13 +84,20 @@ class OpenRouterClient:
                             continue
 
                         payload_text = line.removeprefix("data:").strip()
-                        if not payload_text or payload_text == "[DONE]":
+                        if not payload_text:
                             continue
+                        if payload_text == "[DONE]":
+                            break
 
                         try:
                             payload = json.loads(payload_text)
                         except json.JSONDecodeError:
                             continue
+
+                        error = payload.get("error")
+                        if isinstance(error, dict):
+                            message = error.get("message") or str(error)
+                            raise RuntimeError(f"OpenRouter stream error: {message}")
 
                         for choice in payload.get("choices") or []:
                             delta = choice.get("delta") or {}
@@ -80,6 +111,56 @@ class OpenRouterClient:
                 ) from exc
             except httpx.HTTPError as exc:
                 raise RuntimeError(f"OpenRouter request failed: {type(exc).__name__}: {exc}") from exc
+
+    async def complete_text(
+        self,
+        messages: list[dict[str, str]],
+    ) -> str:
+        settings = get_settings()
+        if not settings.openrouter_api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is missing")
+
+        url = settings.openrouter_base_url.rstrip("/") + "/chat/completions"
+        async with httpx.AsyncClient(
+            timeout=settings.openrouter_read_timeout_seconds
+        ) as client:
+            try:
+                response = await client.post(
+                    url,
+                    headers=self._headers(),
+                    json=self._chat_payload(
+                        messages,
+                        temperature=0.2,
+                        max_tokens=1400,
+                        stream=False,
+                    ),
+                )
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                response_text = exc.response.text[:1000]
+                raise RuntimeError(
+                    f"OpenRouter returned HTTP {exc.response.status_code}: {response_text}"
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"OpenRouter request failed: {type(exc).__name__}: {exc}") from exc
+
+        payload = response.json()
+        error = payload.get("error")
+        if isinstance(error, dict):
+            message = error.get("message") or str(error)
+            raise RuntimeError(f"OpenRouter returned error: {message}")
+
+        choice = (payload.get("choices") or [{}])[0]
+        message = choice.get("message") or {}
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            finish_reason = choice.get("finish_reason") or ""
+            refusal = message.get("refusal") or ""
+            raise RuntimeError(
+                "OpenRouter returned empty assistant content "
+                f"(finish_reason={finish_reason}, refusal={refusal})"
+            )
+        return content
 
     async def invoke_structured(
         self,

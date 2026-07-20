@@ -173,13 +173,21 @@ class ChatWorkflow:
         pending_next: asyncio.Task[str] | None = None
         delta_count = 0
         last_delta_at = started_at
+        used_non_stream_fallback = False
         while True:
             elapsed = asyncio.get_running_loop().time() - started_at
             remaining = settings.answer_stream_total_timeout_seconds - elapsed
             if remaining <= 0:
                 if pending_next is not None:
                     pending_next.cancel()
-                raise RuntimeError("模型回答总耗时过长，请稍后重试或缩短问题。")
+                answer_parts = await self._fallback_complete_answer(
+                    messages,
+                    answer_parts,
+                    context.request_id,
+                    reason="模型回答总耗时过长",
+                )
+                used_non_stream_fallback = True
+                break
 
             if pending_next is None:
                 pending_next = asyncio.create_task(stream.__anext__())
@@ -205,7 +213,21 @@ class ChatWorkflow:
                         now - started_at,
                         delta_count,
                     )
-                    raise RuntimeError("模型流式输出长时间没有响应，请稍后重试。")
+                    yield sse_event(
+                        "status",
+                        {
+                            "stage": "generating_fallback",
+                            "message": "流式输出不稳定，正在切换为完整生成",
+                        },
+                    )
+                    answer_parts = await self._fallback_complete_answer(
+                        messages,
+                        answer_parts,
+                        context.request_id,
+                        reason="模型流式输出长时间没有响应",
+                    )
+                    used_non_stream_fallback = True
+                    break
                 yield sse_event(
                     "status",
                     {
@@ -219,6 +241,30 @@ class ChatWorkflow:
                 delta = pending_next.result()
             except StopAsyncIteration:
                 pending_next = None
+                break
+            except Exception as exc:
+                pending_next = None
+                logger.warning(
+                    "chat answer stream failed request_id=%s elapsed=%.2fs deltas=%d error=%s",
+                    context.request_id,
+                    now - started_at,
+                    delta_count,
+                    exc,
+                )
+                yield sse_event(
+                    "status",
+                    {
+                        "stage": "generating_fallback",
+                        "message": "流式输出中断，正在切换为完整生成",
+                    },
+                )
+                answer_parts = await self._fallback_complete_answer(
+                    messages,
+                    answer_parts,
+                    context.request_id,
+                    reason=str(exc),
+                )
+                used_non_stream_fallback = True
                 break
             pending_next = None
 
@@ -256,6 +302,7 @@ class ChatWorkflow:
             metadata={
                 "answer_strategy": plan.answer_strategy,
                 "rewritten_question": plan.rewritten_question,
+                "used_non_stream_fallback": used_non_stream_fallback,
                 "safety_flags": safety_flags,
             },
             model=self.llm_client.settings_chat_model(),
@@ -263,6 +310,40 @@ class ChatWorkflow:
             generated_at=unix_now(),
         )
         yield sse_event("done", response.model_dump())
+
+    async def _fallback_complete_answer(
+        self,
+        messages: list[dict[str, str]],
+        current_parts: list[str],
+        request_id: str,
+        reason: str,
+    ) -> list[str]:
+        settings = get_settings()
+        try:
+            answer = await asyncio.wait_for(
+                self.llm_client.complete_text(messages),
+                timeout=settings.answer_fallback_timeout_seconds,
+            )
+        except Exception:
+            logger.exception(
+                "chat non-stream fallback failed request_id=%s partial_chars=%d reason=%s",
+                request_id,
+                len("".join(current_parts)),
+                reason,
+            )
+            if current_parts:
+                current = "".join(current_parts).strip()
+                current += "\n\n> 模型流式输出中断，已保留当前已生成内容。"
+                return [current]
+            raise RuntimeError("模型生成中断，非流式补全也未成功，请稍后重试。")
+
+        logger.info(
+            "chat non-stream fallback succeeded request_id=%s chars=%d reason=%s",
+            request_id,
+            len(answer),
+            reason,
+        )
+        return [answer]
 
 
 def _collect_sources(tool_results: list[ExecutedToolResult]):
