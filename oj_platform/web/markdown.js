@@ -22,14 +22,16 @@
     const lines = escaped.split('\n');
     const html = [];
     let inList = false;
+    let listTag = 'ul';
     let inCodeBlock = false;
     let codeBuffer = [];
     let paragraphBuffer = [];
 
     const closeList = () => {
       if (inList) {
-        html.push('</ul>');
+        html.push(`</${listTag}>`);
         inList = false;
+        listTag = 'ul';
       }
     };
 
@@ -85,11 +87,30 @@
       const listMatch = line.match(/^[-*]\s+(.*)$/);
       if (listMatch) {
         closeParagraph();
+        if (inList && listTag !== 'ul') {
+          closeList();
+        }
         if (!inList) {
           html.push('<ul>');
           inList = true;
+          listTag = 'ul';
         }
         html.push(`<li>${renderInlineMarkdown(listMatch[1])}</li>`);
+        continue;
+      }
+
+      const orderedListMatch = line.match(/^\d+[.)]\s+(.*)$/);
+      if (orderedListMatch) {
+        closeParagraph();
+        if (inList && listTag !== 'ol') {
+          closeList();
+        }
+        if (!inList) {
+          html.push('<ol>');
+          inList = true;
+          listTag = 'ol';
+        }
+        html.push(`<li>${renderInlineMarkdown(orderedListMatch[1])}</li>`);
         continue;
       }
 

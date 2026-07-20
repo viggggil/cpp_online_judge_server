@@ -47,6 +47,17 @@ class ToolExecutor:
                 )
                 continue
 
+            missing = _missing_required_arguments(tool, arguments)
+            if missing:
+                results.append(
+                    _error_result(
+                        call.name,
+                        arguments,
+                        _missing_argument_message(call.name, missing),
+                    )
+                )
+                continue
+
             try:
                 raw_result = await tool.ainvoke(arguments)
             except (TypeError, ValueError, ValidationError) as exc:
@@ -79,6 +90,31 @@ def _sanitize_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
     sanitized.pop("user_id", None)
     sanitized.pop("owner_user_id", None)
     return sanitized
+
+
+def _missing_required_arguments(tool: BaseTool, arguments: dict[str, Any]) -> list[str]:
+    schema = getattr(tool, "args_schema", None)
+    if schema is None:
+        return []
+    try:
+        required = schema.model_json_schema().get("required") or []
+    except Exception:
+        return []
+    return [
+        name
+        for name in required
+        if name not in arguments or arguments[name] is None or arguments[name] == ""
+    ]
+
+
+def _missing_argument_message(tool_name: str, missing: list[str]) -> str:
+    if tool_name in {"get_problem", "list_problem_submissions"} and "problem_id" in missing:
+        return "缺少 problem_id，无法查询题目信息；请在问题中提供题号，或先选择题目/提交作为上下文。"
+    if tool_name == "get_submission" and "submission_id" in missing:
+        return "缺少 submission_id，无法查询提交记录；请提供提交编号，或先选择一次提交作为上下文。"
+    if tool_name == "get_conversation_history" and "conversation_id" in missing:
+        return "缺少 conversation_id，无法查询历史会话。"
+    return "缺少必要参数：" + ", ".join(missing)
 
 
 def _error_result(

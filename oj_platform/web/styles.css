@@ -148,9 +148,58 @@ body {
 }
 
 .agent-chat-content {
-  white-space: pre-wrap;
   line-height: 1.75;
   overflow-wrap: anywhere;
+}
+
+.agent-chat-content p {
+  margin: 0 0 0.75em;
+}
+
+.agent-chat-content p:last-child {
+  margin-bottom: 0;
+}
+
+.agent-chat-content h1,
+.agent-chat-content h2,
+.agent-chat-content h3,
+.agent-chat-content h4,
+.agent-chat-content h5,
+.agent-chat-content h6 {
+  margin: 0.75em 0 0.35em;
+  line-height: 1.35;
+}
+
+.agent-chat-content h1:first-child,
+.agent-chat-content h2:first-child,
+.agent-chat-content h3:first-child,
+.agent-chat-content h4:first-child,
+.agent-chat-content h5:first-child,
+.agent-chat-content h6:first-child {
+  margin-top: 0;
+}
+
+.agent-chat-content pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f3f4f6;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.agent-chat-content code {
+  background: #f3f4f6;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.agent-chat-content pre code {
+  padding: 0;
+}
+
+.agent-chat-content ul {
+  margin: 0.25em 0 0.75em;
+  padding-left: 20px;
 }
 
 .agent-composer {

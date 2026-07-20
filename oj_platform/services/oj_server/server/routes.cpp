@@ -42,6 +42,7 @@ namespace {
 
 constexpr auto kProblemListCacheKey = "oj:problems:list";
 constexpr auto kAssignmentListCacheKey = "oj:assignments:list";
+constexpr std::int64_t kAssistantJobTimeoutSeconds = 240;
 
 std::int64_t unix_now_seconds() {
     return std::chrono::duration_cast<std::chrono::seconds>(
@@ -163,6 +164,21 @@ void append_assistant_diagnosis_event(
 
 void finish_assistant_diagnosis_job(const std::shared_ptr<AssistantDiagnosisStageJob>& job) {
     std::lock_guard<std::mutex> lock(job->mutex);
+    job->done = true;
+}
+
+void expire_assistant_diagnosis_job_if_stale(
+    const std::shared_ptr<AssistantDiagnosisStageJob>& job) {
+    const auto now = unix_now_seconds();
+    std::lock_guard<std::mutex> lock(job->mutex);
+    if (job->done || now - job->created_at <= kAssistantJobTimeoutSeconds) {
+        return;
+    }
+
+    crow::json::wvalue error;
+    error["message"] = "AI 对话任务运行时间过长，已自动停止，请稍后重试或缩短问题。";
+    const int next_id = job->events.empty() ? 1 : job->events.back().id + 1;
+    job->events.push_back(AssistantDiagnosisStageEvent{next_id, "error", error.dump()});
     job->done = true;
 }
 
@@ -1079,6 +1095,7 @@ void register_routes(crow::Crow<>& app) {
             if (!job || job->owner_username != user->username) {
                 return json_error(404, "chat job not found");
             }
+            expire_assistant_diagnosis_job_if_stale(job);
 
             int after = 0;
             if (const auto after_param = req.url_params.get("after");
@@ -1243,6 +1260,7 @@ void register_routes(crow::Crow<>& app) {
             if (!job || job->owner_username != user->username) {
                 return json_error(404, "diagnosis job not found");
             }
+            expire_assistant_diagnosis_job_if_stale(job);
 
             int after = 0;
             if (const auto after_param = req.url_params.get("after");

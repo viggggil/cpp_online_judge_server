@@ -55,6 +55,22 @@ function clearChat() {
   chatMessagesNode().innerHTML = '';
 }
 
+function renderMarkdownToNode(contentNode) {
+  if (!contentNode) {
+    return;
+  }
+  const markdown = contentNode.dataset.rawMarkdown || '';
+  if (!markdown) {
+    contentNode.innerHTML = '';
+    return;
+  }
+  if (window.ojMarkdown?.markdownToHtml) {
+    contentNode.innerHTML = window.ojMarkdown.markdownToHtml(markdown);
+  } else {
+    contentNode.textContent = markdown;
+  }
+}
+
 function appendChatMessage(role, content = '', meta = '') {
   const wrapper = document.createElement('div');
   wrapper.className = `agent-chat-message agent-chat-message-${role}`;
@@ -71,7 +87,8 @@ function appendChatMessage(role, content = '', meta = '') {
 
   const contentNode = document.createElement('div');
   contentNode.className = 'agent-chat-content';
-  contentNode.textContent = content;
+  contentNode.dataset.rawMarkdown = content || '';
+  renderMarkdownToNode(contentNode);
   bubble.appendChild(contentNode);
 
   wrapper.appendChild(bubble);
@@ -84,8 +101,10 @@ function appendToMessage(contentNode, content, { paragraph = false } = {}) {
   if (!contentNode || !content) {
     return;
   }
-  const prefix = paragraph && contentNode.textContent ? '\n\n' : '';
-  contentNode.textContent += `${prefix}${content}`;
+  const current = contentNode.dataset.rawMarkdown || '';
+  const prefix = paragraph && current ? '\n\n' : '';
+  contentNode.dataset.rawMarkdown = `${current}${prefix}${content}`;
+  renderMarkdownToNode(contentNode);
   scrollChatToBottom();
 }
 
@@ -93,8 +112,26 @@ function setMessage(contentNode, content) {
   if (!contentNode) {
     return;
   }
-  contentNode.textContent = content || '';
+  contentNode.dataset.rawMarkdown = content || '';
+  renderMarkdownToNode(contentNode);
   scrollChatToBottom();
+}
+
+function showNewConversationPrompt() {
+  clearChat();
+  appendChatMessage('assistant', '已开启新对话。可以直接问算法、题目思路，也可以选择一次提交作为上下文。');
+}
+
+function activateNewConversation({ clearMessages = false } = {}) {
+  activeConversationId = '';
+  setAgentMode('new_conversation');
+  const conversationSelect = document.getElementById('agent-conversation-select');
+  if (conversationSelect) {
+    conversationSelect.value = '';
+  }
+  if (clearMessages) {
+    showNewConversationPrompt();
+  }
 }
 
 function formatSourceLine(source) {
@@ -287,7 +324,7 @@ async function submitAgentQuestion() {
     return;
   }
   if (agentMode === 'continue_conversation' && !conversationId) {
-    setAgentMode('new_conversation');
+    activateNewConversation();
   }
 
   button.disabled = true;
@@ -331,6 +368,7 @@ async function submitAgentQuestion() {
     let lastEventId = 0;
     const pollIntervalMs = Number(data.poll_interval_ms || 700);
     let finished = false;
+    let lastStatusText = '';
 
     while (!finished) {
       await sleep(pollIntervalMs);
@@ -348,7 +386,11 @@ async function submitAgentQuestion() {
 
         if (event.event === 'status') {
           if (shouldShowStatus(eventData.stage, eventData.message)) {
-            appendToMessage(assistantMessage, eventData.message || eventData.stage || '对话进行中', { paragraph: true });
+            const statusText = eventData.message || eventData.stage || '对话进行中';
+            if (statusText !== lastStatusText) {
+              lastStatusText = statusText;
+              appendToMessage(assistantMessage, statusText, { paragraph: true });
+            }
           }
         } else if (event.event === 'tool_call') {
           appendToMessage(assistantMessage, `正在查询：${eventData.name || '工具'}`, { paragraph: true });
@@ -404,15 +446,15 @@ function bindModePickers() {
   const submissionSelect = document.getElementById('agent-submission-select');
   const conversationSelect = document.getElementById('agent-conversation-select');
 
-  submissionPicker.addEventListener('click', () => setAgentMode('new_conversation'));
+  submissionPicker.addEventListener('click', () => activateNewConversation({ clearMessages: true }));
   conversationPicker.addEventListener('click', () => setAgentMode('continue_conversation'));
   submissionSelect.addEventListener('focus', () => setAgentMode('new_conversation'));
-  submissionSelect.addEventListener('change', () => setAgentMode('new_conversation'));
+  submissionSelect.addEventListener('change', () => activateNewConversation({ clearMessages: true }));
   conversationSelect.addEventListener('focus', () => setAgentMode('continue_conversation'));
   conversationSelect.addEventListener('change', () => {
     activeConversationId = conversationSelect.value;
     if (!activeConversationId) {
-      setAgentMode('new_conversation');
+      activateNewConversation({ clearMessages: true });
       return;
     }
     setAgentMode('continue_conversation');

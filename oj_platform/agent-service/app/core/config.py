@@ -19,6 +19,9 @@ class Settings(BaseModel):
     chat_model: str = "deepseek/deepseek-v4-flash"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_read_timeout_seconds: float = 60
+    planner_timeout_seconds: float = 20
+    answer_stream_idle_timeout_seconds: float = 35
+    answer_stream_total_timeout_seconds: float = 150
 
 
 def get_settings() -> Settings:
@@ -39,5 +42,12 @@ def get_settings() -> Settings:
         ),
         openrouter_read_timeout_seconds=float(
             os.getenv("OPENROUTER_READ_TIMEOUT_SECONDS", "60")
+        ),
+        planner_timeout_seconds=float(os.getenv("PLANNER_TIMEOUT_SECONDS", "20")),
+        answer_stream_idle_timeout_seconds=float(
+            os.getenv("ANSWER_STREAM_IDLE_TIMEOUT_SECONDS", "35")
+        ),
+        answer_stream_total_timeout_seconds=float(
+            os.getenv("ANSWER_STREAM_TOTAL_TIMEOUT_SECONDS", "150")
         ),
     )
