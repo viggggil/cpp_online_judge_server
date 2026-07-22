@@ -18,7 +18,7 @@ from app.rag.ingest import (
     build_embedding_model,
     resolve_project_path,
 )
-from app.schemas.diagnosis import DiagnosisRequest, SourceReference
+from app.schemas.rag import SourceReference
 
 
 DEFAULT_GENERAL_MIN_SCORE = 0.56
@@ -64,14 +64,6 @@ def _metadata_tags(metadata: dict[str, Any]) -> set[str]:
     }
 
 
-def _problem_tags(request: DiagnosisRequest) -> set[str]:
-    return {
-        str(tag).strip().lower()
-        for tag in request.problem.tags
-        if str(tag).strip()
-    }
-
-
 def _normalized_tags(tags: list[str] | set[str] | tuple[str, ...]) -> set[str]:
     return {
         str(tag).strip().lower()
@@ -89,40 +81,6 @@ def _is_problem_editorial(metadata: dict[str, Any]) -> bool:
         or safe_level == "editorial"
         or "problem_hints/" in source
     )
-
-
-def _is_same_problem_editorial(
-    metadata: dict[str, Any],
-    request: DiagnosisRequest,
-) -> bool:
-    return (
-        _is_problem_editorial(metadata)
-        and _metadata_problem_id(metadata) == request.problem.problem_id
-    )
-
-
-def _is_relevant_general_document(
-    metadata: dict[str, Any],
-    request: DiagnosisRequest,
-) -> bool:
-    if _is_problem_editorial(metadata):
-        return False
-
-    tags = _problem_tags(request)
-    if not tags:
-        return False
-
-    metadata_tags = _metadata_tags(metadata)
-    if tags.intersection(metadata_tags):
-        return True
-
-    knowledge_point = str(
-        metadata.get("knowledge_point")
-        or metadata.get("category")
-        or metadata.get("title")
-        or ""
-    ).strip().lower()
-    return any(tag and tag in knowledge_point for tag in tags)
 
 
 def _is_relevant_general_document_for_tags(
@@ -145,26 +103,6 @@ def _is_relevant_general_document_for_tags(
         or ""
     ).strip().lower()
     return any(tag and tag in knowledge_point for tag in tags)
-
-
-def build_retrieval_query(request: DiagnosisRequest) -> str:
-    problem = request.problem
-    submission = request.submission
-    parts = [
-        f"题目 {problem.problem_id} {problem.title}",
-        f"标签 {' '.join(problem.tags)}",
-        f"判题状态 {submission.judge_status}",
-        request.question or "请诊断这次提交。",
-    ]
-
-    if submission.compiler_output:
-        parts.append(f"编译输出 {submission.compiler_output[:1200]}")
-    if submission.runtime_stderr:
-        parts.append(f"运行错误 {submission.runtime_stderr[:1200]}")
-    if problem.description_markdown:
-        parts.append(problem.description_markdown[:1800])
-
-    return "\n".join(part for part in parts if part.strip())
 
 
 class KnowledgeRetriever:
@@ -204,104 +142,6 @@ class KnowledgeRetriever:
             embedding_model_name=os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL),
             top_k=int(os.getenv("RAG_TOP_K", "5")),
         )
-
-    def retrieve(self, request: DiagnosisRequest) -> list[RetrievedDocument]:
-        if not self.persist_dir.exists():
-            return []
-
-        client = chromadb.PersistentClient(
-            path=str(self.persist_dir),
-            settings=ChromaSettings(anonymized_telemetry=False),
-        )
-        collection = client.get_collection(self.collection_name)
-        if collection.count() <= 0:
-            return []
-
-        query = build_retrieval_query(request)
-        embedding_model = build_embedding_model(self.embedding_model_name, self.cache_dir)
-        query_embedding = next(embedding_model.embed([query])).tolist()
-
-        retrieved: list[RetrievedDocument] = []
-        seen_ids: set[str] = set()
-
-        def add_results(
-            result: dict,
-            *,
-            accept: Callable[[dict[str, Any]], bool],
-            min_score: float | None = None,
-            max_documents: int | None = None,
-        ) -> None:
-            ids = result.get("ids", [[]])[0]
-            documents = result.get("documents", [[]])[0]
-            metadatas = result.get("metadatas", [[]])[0]
-            distances = result.get("distances", [[]])[0]
-            accepted_count = 0
-            for chunk_id, document, metadata, distance in zip(
-                ids,
-                documents,
-                metadatas,
-                distances,
-                strict=False,
-            ):
-                metadata = metadata or {}
-                if not accept(metadata):
-                    continue
-                if chunk_id in seen_ids:
-                    continue
-
-                score = 1.0 / (1.0 + float(distance))
-                if min_score is not None and score < min_score:
-                    continue
-                if max_documents is not None and accepted_count >= max_documents:
-                    break
-
-                seen_ids.add(chunk_id)
-                accepted_count += 1
-                source = SourceReference(
-                    document_id=str(metadata.get("document_id", "")),
-                    source=str(metadata.get("source", "")),
-                    title=str(metadata.get("title", "")),
-                    knowledge_point=str(
-                        metadata.get("knowledge_point")
-                        or metadata.get("category")
-                        or ""
-                    ),
-                    chunk_index=int(metadata.get("chunk_index", 0)),
-                    score=round(score, 6),
-                )
-                retrieved.append(
-                    RetrievedDocument(
-                        content=str(document),
-                        source=source,
-                        distance=float(distance),
-                    )
-                )
-
-        problem_result = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=min(2, self.top_k),
-            where={"problem_id": request.problem.problem_id},
-            include=["documents", "metadatas", "distances"],
-        )
-        add_results(
-            problem_result,
-            accept=lambda metadata: _is_same_problem_editorial(metadata, request),
-        )
-
-        general_result = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=max(self.top_k * 5, 10),
-            include=["documents", "metadatas", "distances"],
-        )
-        add_results(
-            general_result,
-            accept=lambda metadata: _is_relevant_general_document(metadata, request),
-            min_score=self.general_min_score,
-            max_documents=self.general_max_documents,
-        )
-
-        retrieved.sort(key=lambda item: item.distance)
-        return retrieved[: self.top_k]
 
     def retrieve_query(
         self,
