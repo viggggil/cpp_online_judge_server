@@ -126,6 +126,7 @@ services:
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
         PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-300}
         PIP_RETRIES: ${PIP_RETRIES:-3}
+        AGENT_PIP_OFFLINE: ${AGENT_PIP_OFFLINE:-1}
     container_name: oj_platform_agent_service
     restart: unless-stopped
     environment:
@@ -137,6 +138,9 @@ services:
       OJ_SERVER_BASE_URL: http://oj_server:18080
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       CHAT_MODEL: ${CHAT_MODEL:-deepseek/deepseek-v4-flash}
+      PLANNER_MODEL: ${PLANNER_MODEL:-deepseek/deepseek-v4-flash}
+      PLANNER_PROVIDER_SORT: ${PLANNER_PROVIDER_SORT:-latency}
+      PLANNER_TIMEOUT_SECONDS: ${PLANNER_TIMEOUT_SECONDS:-28}
       OPENROUTER_BASE_URL: https://openrouter.ai/api/v1
       OPENROUTER_READ_TIMEOUT_SECONDS: ${OPENROUTER_READ_TIMEOUT_SECONDS:-180}
       OPENROUTER_PROVIDER_SORT: ${OPENROUTER_PROVIDER_SORT:-throughput}

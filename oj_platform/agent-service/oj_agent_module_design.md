@@ -9,7 +9,7 @@
 
 `agent-service` 是一个 Python FastAPI 服务，负责为 OJ 平台提供 AI 编程学习助手能力。它不直接面对浏览器，不直接访问 MySQL，也不直接信任前端输入的用户身份。所有用户请求先进入 C++ `oj_server`，由 `oj_server` 完成登录态校验、会话归属校验、上下文恢复和数据库持久化，再通过内部 API 调用 `agent-service`。
 
-当前 Agent 主链路是通用多轮聊天，不再以固定“提交诊断结构化输出”为业务中心。用户可以开启新对话，也可以继续历史会话；可以问题目思路、算法概念、提交错误、复杂度、上一轮解释等问题。Agent 会根据本轮问题、最近历史和当前上下文自行规划是否需要查询题目、提交或本地知识库。
+当前 Agent 主链路是通用多轮聊天，不再以固定结构化输出为业务中心。用户可以开启新对话，也可以继续历史会话；可以问题目思路、算法概念、提交错误、复杂度、上一轮解释等问题。Agent 会根据本轮问题、最近历史和当前上下文自行规划是否需要查询题目、提交或本地知识库。
 
 核心职责：
 
@@ -74,9 +74,11 @@ agent-service (FastAPI)
 | --- | --- | --- |
 | Web 框架 | FastAPI + Uvicorn | 提供内部 API 和 SSE 流式响应 |
 | Schema | Pydantic v2 | 请求、响应、工具记录和 planner 计划校验 |
+| Workflow | LangGraph `StateGraph` | 编排 Agent Chat 节点、分支和自定义流式事件 |
 | Prompt | LangChain `ChatPromptTemplate` | 用于 planner prompt 和 answer prompt |
 | Tool 抽象 | LangChain `StructuredTool` | OJ 工具和 RAG 工具统一用结构化参数 |
 | LLM Client | 自写 OpenRouter `httpx` client | `langchain-openrouter` 在当前环境测试不稳定，暂不作为主链路 |
+| Planner 模型 | `openai/gpt-4.1-mini:exacto` | 计划阶段优先使用更稳的 tool-calling 路由，默认不再强制 throughput sort |
 | RAG 向量库 | Chroma PersistentClient | 数据目录默认 `/app/data/chroma` |
 | Embedding | fastembed | 默认模型 `BAAI/bge-small-zh-v1.5` |
 | 知识库 | Markdown 文件 | 位于 `knowledge/algorithms` 和 `knowledge/problem_hints` |
@@ -90,13 +92,17 @@ agent-service/
 │  ├─ api/
 │  │  ├─ chat.py                 # /api/v1/chat/stream
 │  │  ├─ dependencies.py         # 内部 token / request id 校验
-│  │  ├─ health.py               # /health /ready
-│  │  └─ diagnoses.py            # 历史兼容接口，不作为当前主链路
+│  │  └─ health.py               # /health /ready
 │  ├─ clients/
 │  │  ├─ oj_client.py            # 调 oj_server 内部 API
 │  │  └─ openrouter_client.py    # 自写 OpenRouter client
 │  ├─ core/
 │  │  └─ config.py               # 环境变量配置
+│  ├─ graphs/
+│  │  ├─ chat_graph.py           # LangGraph StateGraph 定义
+│  │  ├─ chat_state.py           # ChatGraphState
+│  │  ├─ nodes.py                # prepare/plan/tools/generate/finalize 节点
+│  │  └─ utils.py                # fallback、source 去重、上下文解析
 │  ├─ llm/
 │  │  └─ messages.py             # LangChain message -> OpenRouter message
 │  ├─ rag/
@@ -104,7 +110,6 @@ agent-service/
 │  │  └─ retriever.py            # Chroma 检索
 │  ├─ schemas/
 │  │  ├─ chat.py                 # Agent Chat schema
-│  │  ├─ diagnosis.py            # 历史兼容 schema
 │  │  ├─ oj.py                   # OJ 数据 schema
 │  │  ├─ rag.py                  # SourceReference
 │  │  └─ streaming.py            # SSE helper
@@ -117,13 +122,11 @@ agent-service/
 │  │  ├─ oj_tools.py             # OJ 数据工具
 │  │  └─ rag_tools.py            # retrieve_knowledge
 │  └─ workflows/
-│     ├─ chat_workflow.py        # 当前 Agent Chat 主流程
-│     └─ diagnosis_workflow.py   # 历史兼容流程
+│     └─ chat_workflow.py        # LangGraph -> SSE 的薄适配器
 ├─ knowledge/                    # Markdown 知识库
 ├─ scripts/
 │  ├─ ingest_knowledge.py        # 构建/刷新 Chroma 索引
-│  ├─ check_openrouter.py        # OpenRouter 连通性检查
-│  └─ check_structured_diagnosis.py
+│  └─ check_openrouter.py        # OpenRouter 连通性检查
 ├─ tests/
 │  └─ test_chat_workflow_units.py
 ├─ pyproject.toml
@@ -139,6 +142,7 @@ POST /api/v1/chat/stream
 ```
 
 同一个接口同时支持新对话和继续对话，区别由请求中的 `conversation.conversation_id`、`conversation.history` 和 `initial_context` 决定。
+Planner 会先在流式事件里输出一段 Markdown 计划预览，随后才进入工具调用和回答生成；最终 `done` 事件只包含最终回答和运行结果，不再回传 planner 计划正文。
 
 ### 5.1 阶段流转
 
@@ -146,25 +150,35 @@ POST /api/v1/chat/stream
 AgentChatRequest
   |
   v
-status: planning
+ChatWorkflow.run_stage_stream()
   |
   v
-PlannerService.plan()
+LangGraph StateGraph
+  |
+  v
+prepare_node
+  |
+  v
+plan_node
   |
   +--> OpenRouter structured JSON
   +--> PlannerPlan(tool_calls, intent, answer_strategy, rewritten_question)
   |
-  v
-ToolExecutor.execute()
+  +--> 有工具计划: execute_tools_node
+  |       |
+  |       +--> ToolExecutor
+  |       +--> OjTools / RAG tool
   |
-  +--> OjTools
-  +--> RAG tool
-  |
-  v
-PromptService.build_answer_messages()
+  +--> 无工具计划: 跳过工具
   |
   v
-OpenRouterClient.stream_text()
+collect_sources_node
+  |
+  v
+build_answer_messages_node
+  |
+  v
+generate_answer_node
   |
   +--> delta events
   +--> idle/stream error -> complete_text fallback
@@ -173,8 +187,20 @@ OpenRouterClient.stream_text()
 SafetyService.validate_answer()
   |
   v
+finalize_node
+  |
+  v
 done: AgentChatResponse
 ```
+
+`ChatWorkflow` 不再承载业务流程，只负责：
+
+- 构造 LangGraph 初始状态：`request`、`context`。
+- 使用 `conversation_id` 或 `request_id` 作为 LangGraph `thread_id`。
+- 消费 graph `custom` stream。
+- 将 graph 节点发出的 `{event, data}` 转换为现有 SSE 文本。
+
+因此前端和 `oj_server` 无需感知 LangGraph，仍然消费原来的 SSE 协议。
 
 ### 5.2 Planner 行为
 
@@ -553,7 +579,7 @@ curl http://127.0.0.1:8001/ready
 - planner 和 answer 目前共用 `CHAT_MODEL`，还未拆为独立模型配置。
 - Agent run trace 尚未持久化，排障主要依赖 Docker logs 和 `tool_result`。
 - RAG 当前是 embedding 检索，没有 rerank。
-- 历史兼容的 diagnosis API 代码仍存在，但不属于当前 Agent Chat 设计主链路。
+- LangGraph 当前未启用持久化 checkpointer，只作为运行时编排层。
 
 ## 13. 后续演进方向
 
@@ -561,8 +587,8 @@ curl http://127.0.0.1:8001/ready
 
 1. 隐藏或实现 `search_problem`、`list_problem_submissions`。
 2. Tool result 增加结构化 `error_code`。
-3. 增加 Agent run trace 表，保存 planner plan、tool calls、tool results、fallback 和耗时。
+3. 增加 Agent run trace 表或 LangGraph checkpoint 存储，保存 planner plan、tool calls、tool results、fallback 和耗时。
 4. 拆分 `PLANNER_MODEL`、`ANSWER_MODEL`、`FALLBACK_MODEL`。
 5. 增加会话上下文栏，支持用户查看/清除当前题目和提交绑定。
 6. 对 RAG 增加多 query 检索和 rerank。
-7. 建立固定评测集，回放多轮对话、缺参数、RAG、提交诊断和工具失败场景。
+7. 建立固定评测集，回放多轮对话、缺参数、RAG、提交错误分析和工具失败场景。

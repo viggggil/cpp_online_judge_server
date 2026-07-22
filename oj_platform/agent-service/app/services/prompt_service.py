@@ -57,6 +57,8 @@ class PromptService:
 8. rewritten_question 必须基于初始上下文和最近对话历史，重述用户本轮问题，让“这个题”“这份提交”“上一轮”等指代变成明确对象。
 9. 如果已知题号或提交号，rewritten_question 中要显式包含它们，例如“题目 1001 为什么不能用二分”“提交 sub_xxx WA 的可能原因”。
 10. 如果要调用 retrieve_knowledge，query 应使用 rewritten_question 或基于它压缩出的明确检索语句，不要直接照抄用户原话。
+11. 你还要给本轮对话起一个简短标题，放在 conversation_title 中，标题应像 ChatGPT 那样概括主题，避免直接复制用户整句提问。
+12. conversation_title 要尽量短，优先 6 到 12 个中文字符，最多不超过 20 个字符。
 """.strip(),
                 ),
                 (
@@ -78,6 +80,7 @@ user_id: {user_id}
 {message}
 
 请输出符合 JSON Schema 的工具计划。
+如果可以，请同时填入 conversation_title。
 """.strip(),
                 ),
             ]
@@ -172,7 +175,7 @@ Planner 重述后的本轮问题：
         return lc_messages_to_openrouter(messages)
 
     def _format_chat_history(self, request: AgentChatRequest) -> str:
-        history = request.conversation.history[-8:]
+        history = request.conversation.history[-4:]
         if not history:
             return "无"
         return "\n".join(

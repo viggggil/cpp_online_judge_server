@@ -3,6 +3,7 @@ import re
 from langchain_core.tools import BaseTool
 
 from app.clients.openrouter_client import OpenRouterClient
+from app.core.config import get_settings
 from app.schemas.chat import AgentChatRequest, PlannerPlan, PlannerToolCall
 from app.services.prompt_service import PromptService
 
@@ -18,16 +19,20 @@ class PlannerService:
         tools: list[BaseTool],
     ) -> PlannerPlan:
         tool_descriptions = [
-            f"- {tool.name}: {tool.description or ''}; args_schema={_schema_text(tool)}"
+            _compact_tool_description(tool)
             for tool in tools
         ]
         messages = self.prompt_service.build_planner_messages(
             request,
             tool_descriptions,
         )
+        settings = get_settings()
         result = await self.llm_client.invoke_structured(
             messages=messages,
             response_model=PlannerPlan,
+            model=settings.planner_model,
+            provider_sort=settings.planner_provider_sort or None,
+            max_tokens=800,
         )
         return self._normalize_plan(request, result.data, tools)
 
@@ -61,17 +66,51 @@ class PlannerService:
             answer_strategy=plan.answer_strategy[:500],
             intent=plan.intent[:64],
             rewritten_question=rewritten_question[:1000],
+            conversation_title=_normalize_conversation_title(
+                plan.conversation_title,
+                request,
+                rewritten_question,
+            ),
         )
 
 
-def _schema_text(tool: BaseTool) -> str:
+def _compact_tool_description(tool: BaseTool) -> str:
     schema = getattr(tool, "args_schema", None)
     if schema is None:
-        return "{}"
+        return f"- {tool.name}: {tool.description or ''}".strip()
     try:
-        return schema.model_json_schema()
+        schema_json = schema.model_json_schema()
+        required = schema_json.get("required") or []
     except Exception:
-        return str(schema)
+        return f"- {tool.name}: {tool.description or ''}".strip()
+    required_text = ", ".join(required[:6]) if required else "无必填参数"
+    return f"- {tool.name}: {tool.description or ''}; 必填参数: {required_text}".strip()
+
+
+def _normalize_conversation_title(
+    title: str,
+    request: AgentChatRequest,
+    rewritten_question: str,
+) -> str:
+    cleaned = " ".join((title or "").split()).strip()
+    if not cleaned:
+        return ""
+    normalized_title = _normalize_title_key(cleaned)
+    normalized_message = _normalize_title_key(request.message)
+    normalized_rewritten = _normalize_title_key(rewritten_question)
+    if normalized_title == normalized_message or normalized_title == normalized_rewritten:
+        return ""
+    if len(cleaned) > 20:
+        cleaned = cleaned[:20].rstrip("，,。.!！？? ")
+    return cleaned
+
+
+def _normalize_title_key(text: str) -> str:
+    return "".join(
+        ch.lower()
+        for ch in text
+        if not ch.isspace() and ch not in "，,。.!！？?：:；;、()（）[]【】{}<>《》\"'`~·-_/\\|"
+    )
 
 
 def _normalize_tool_arguments(

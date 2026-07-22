@@ -98,12 +98,16 @@ function appendChatMessage(role, content = '', meta = '') {
   return contentNode;
 }
 
-function appendToMessage(contentNode, content, { paragraph = false } = {}) {
+function appendToMessage(contentNode, content, { paragraph = false, block = false } = {}) {
   if (!contentNode || !content) {
     return;
   }
   const current = contentNode.dataset.rawMarkdown || '';
-  const prefix = paragraph && current ? '\n\n' : '';
+  const needsSeparator = paragraph || block;
+  let prefix = '';
+  if (needsSeparator && current) {
+    prefix = current.endsWith('\n\n') ? '' : current.endsWith('\n') ? '\n' : '\n\n';
+  }
   contentNode.dataset.rawMarkdown = `${current}${prefix}${content}`;
   renderMarkdownToNode(contentNode);
   scrollChatToBottom();
@@ -375,6 +379,8 @@ async function submitAgentQuestion() {
     const pollIntervalMs = Number(data.poll_interval_ms || 700);
     let finished = false;
     let lastStatusText = '';
+    let planSectionStarted = false;
+    let answerSectionStarted = false;
 
     while (!finished) {
       await sleep(pollIntervalMs);
@@ -407,10 +413,37 @@ async function submitAgentQuestion() {
         } else if (event.event === 'sources') {
           const sourceCount = Array.isArray(eventData.sources) ? eventData.sources.length : 0;
           appendToMessage(assistantMessage, `${eventData.message || '知识库检索完成'}，命中 ${sourceCount} 个片段`, { paragraph: true });
+        } else if (event.event === 'plan_delta') {
+          if (!planSectionStarted) {
+            appendToMessage(assistantMessage, '### 计划\n\n', { block: true });
+            planSectionStarted = true;
+          }
+          appendToMessage(assistantMessage, eventData.content || '');
+        } else if (event.event === 'plan_done') {
+          if (eventData.tool_count !== undefined) {
+            appendToMessage(
+              assistantMessage,
+              `> 计划完成，共 ${eventData.tool_count} 个工具调用候选。`,
+              { block: true },
+            );
+          }
         } else if (event.event === 'delta') {
+          if (!answerSectionStarted) {
+            appendToMessage(assistantMessage, '### 回答\n\n', { block: true });
+            answerSectionStarted = true;
+          }
           appendToMessage(assistantMessage, eventData.content || '');
         } else if (event.event === 'done') {
-          setMessage(assistantMessage, formatFinalChat(eventData));
+          const footer = [];
+          if (eventData.model || eventData.provider) {
+            footer.push(`模型：${eventData.model || '-'}${eventData.provider ? ` ｜ ${eventData.provider}` : ''}`);
+          }
+          if (eventData.conversation_id || eventData.message_id) {
+            footer.push(`会话：${eventData.conversation_id || '-'} ｜ 消息：${eventData.message_id || '-'}`);
+          }
+          if (footer.length) {
+            appendToMessage(assistantMessage, footer.join('\n'), { block: true });
+          }
           const completedConversationId = eventData.conversation_id || activeConversationId;
           activeConversationId = completedConversationId;
           await loadAgentConversations();

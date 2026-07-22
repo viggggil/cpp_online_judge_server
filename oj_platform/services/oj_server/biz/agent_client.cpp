@@ -267,6 +267,7 @@ AgentChatResponse parse_agent_chat_response(
     AgentChatResponse response;
     response.request_id = json_string(json, "request_id");
     response.user_id = json_i64(json, "user_id");
+    response.title = json_string(json, "title");
     if (json.has("problem_id") && json["problem_id"].t() == crow::json::type::Number) {
         response.problem_id = json["problem_id"].i();
     }

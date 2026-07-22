@@ -22,6 +22,9 @@ class OpenRouterClient:
     def settings_chat_model(self) -> str:
         return get_settings().chat_model
 
+    def settings_planner_model(self) -> str:
+        return get_settings().planner_model
+
     def _headers(self) -> dict[str, str]:
         settings = get_settings()
         return {
@@ -33,13 +36,14 @@ class OpenRouterClient:
         self,
         messages: list[dict[str, str]],
         *,
+        model: str,
         temperature: float,
         max_tokens: int,
         stream: bool,
+        provider_sort: str = "",
     ) -> dict:
-        settings = get_settings()
         payload = {
-            "model": settings.chat_model,
+            "model": model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -49,7 +53,7 @@ class OpenRouterClient:
                 "exclude": True,
             },
         }
-        provider_sort = settings.openrouter_provider_sort.strip().lower()
+        provider_sort = provider_sort.strip().lower()
         if provider_sort in {"throughput", "latency", "price"}:
             payload["provider"] = {"sort": provider_sort}
         return payload
@@ -57,6 +61,11 @@ class OpenRouterClient:
     async def stream_text(
         self,
         messages: list[dict[str, str]],
+        *,
+        model: str | None = None,
+        provider_sort: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 1400,
     ) -> AsyncIterator[str]:
         settings = get_settings()
         if not settings.openrouter_api_key:
@@ -73,9 +82,15 @@ class OpenRouterClient:
                     headers=self._headers(),
                     json=self._chat_payload(
                         messages,
-                        temperature=0.2,
-                        max_tokens=1400,
+                        model=model or settings.chat_model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
                         stream=True,
+                        provider_sort=(
+                            provider_sort
+                            if provider_sort is not None
+                            else settings.openrouter_provider_sort
+                        ),
                     ),
                 ) as response:
                     response.raise_for_status()
@@ -115,6 +130,11 @@ class OpenRouterClient:
     async def complete_text(
         self,
         messages: list[dict[str, str]],
+        *,
+        model: str | None = None,
+        provider_sort: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 1400,
     ) -> str:
         settings = get_settings()
         if not settings.openrouter_api_key:
@@ -130,9 +150,15 @@ class OpenRouterClient:
                     headers=self._headers(),
                     json=self._chat_payload(
                         messages,
-                        temperature=0.2,
-                        max_tokens=1400,
+                        model=model or settings.chat_model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
                         stream=False,
+                        provider_sort=(
+                            provider_sort
+                            if provider_sort is not None
+                            else settings.openrouter_provider_sort
+                        ),
                     ),
                 )
                 response.raise_for_status()
@@ -166,6 +192,10 @@ class OpenRouterClient:
         self,
         messages: list[dict[str, str]],
         response_model: type[T],
+        *,
+        model: str | None = None,
+        provider_sort: str | None = None,
+        max_tokens: int = 800,
     ) -> StructuredLLMResult[T]:
         settings = get_settings()
         if not settings.openrouter_api_key:
@@ -176,30 +206,35 @@ class OpenRouterClient:
             timeout=settings.openrouter_read_timeout_seconds
         ) as client:
             try:
+                payload = {
+                        "model": model or settings.chat_model,
+                        "messages": messages,
+                        "temperature": 0,
+                        "max_tokens": max_tokens,
+                    "reasoning": {
+                        "effort": "none",
+                        "exclude": True,
+                    },
+                    "response_format": {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": response_model.__name__,
+                            "strict": True,
+                            "schema": response_model.model_json_schema(),
+                        },
+                    },
+                }
+                if provider_sort is not None:
+                    sort = provider_sort.strip().lower()
+                    if sort in {"throughput", "latency", "price"}:
+                        payload["provider"] = {"sort": sort}
                 response = await client.post(
                     url,
                     headers={
                         "Authorization": f"Bearer {settings.openrouter_api_key}",
                         "Content-Type": "application/json",
                     },
-                    json={
-                        "model": settings.chat_model,
-                        "messages": messages,
-                        "temperature": 0,
-                        "max_tokens": 2000,
-                        "reasoning": {
-                            "effort": "none",
-                            "exclude": True,
-                        },
-                        "response_format": {
-                            "type": "json_schema",
-                            "json_schema": {
-                                "name": response_model.__name__,
-                                "strict": True,
-                                "schema": response_model.model_json_schema(),
-                            },
-                        },
-                    },
+                    json=payload,
                 )
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:

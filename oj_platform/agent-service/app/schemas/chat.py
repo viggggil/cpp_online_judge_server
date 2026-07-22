@@ -54,6 +54,7 @@ class PlannerPlan(BaseModel):
     answer_strategy: str = ""
     intent: str = ""
     rewritten_question: str = ""
+    conversation_title: str = ""
 
 
 class ToolCallRecord(BaseModel):
@@ -79,6 +80,7 @@ class AgentChatResponse(BaseModel):
 
     request_id: str
     user_id: int
+    title: str = ""
     conversation_id: str | None = None
     problem_id: int | None = None
     submission_id: str | None = None

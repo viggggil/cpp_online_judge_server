@@ -5,6 +5,7 @@
 #include "services/oj_server/data/submission_repository.h"
 
 #include <chrono>
+#include <cctype>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -30,6 +31,46 @@ std::string truncate_title(const std::string& value) {
         return value;
     }
     return value.substr(0, 120);
+}
+
+std::string normalize_title_key(const std::string& value) {
+    std::string normalized;
+    normalized.reserve(value.size());
+    for (unsigned char ch : value) {
+        if (std::isspace(ch) || std::ispunct(ch)) {
+            continue;
+        }
+        normalized.push_back(static_cast<char>(std::tolower(ch)));
+    }
+    return normalized;
+}
+
+std::string build_default_chat_title(
+    const std::optional<std::int64_t>& problem_id,
+    const std::optional<std::string>& submission_id) {
+    if (submission_id && !submission_id->empty()) {
+        return "提交 " + *submission_id + " 分析";
+    }
+    if (problem_id) {
+        return "题目 " + std::to_string(*problem_id) + " 讨论";
+    }
+    return "编程讨论";
+}
+
+std::string choose_chat_title(
+    const std::string& candidate,
+    const std::optional<std::int64_t>& problem_id,
+    const std::optional<std::string>& submission_id,
+    const std::string& message = "") {
+    const auto trimmed = truncate_title(candidate);
+    if (!trimmed.empty()) {
+        const auto normalized_candidate = normalize_title_key(trimmed);
+        const auto normalized_message = normalize_title_key(message);
+        if (normalized_message.empty() || normalized_candidate != normalized_message) {
+            return trimmed;
+        }
+    }
+    return build_default_chat_title(problem_id, submission_id);
 }
 
 std::string default_user_message(const std::string& message) {
@@ -238,8 +279,11 @@ AssistantDiagnosisResult AiAssistantService::diagnose(
     create_request.problem_id = request.problem_id;
     create_request.submission_db_id = submission->submission_db_id;
     create_request.submission_id = submission->submission_id;
-    create_request.title = truncate_title(
-        request.question.empty() ? diagnosis.summary : request.question);
+    create_request.title = choose_chat_title(
+        diagnosis.summary,
+        request.problem_id,
+        submission->submission_id,
+        request.question);
     create_request.hint_level = request.hint_level;
     create_request.request_id = diagnosis.request_id.empty() ? request_id : diagnosis.request_id;
     create_request.user_content = request.question.empty() ? "请诊断这次提交。" : request.question;
@@ -352,8 +396,11 @@ AssistantDiagnosisResult AiAssistantService::diagnose_stream(
     create_request.problem_id = request.problem_id;
     create_request.submission_db_id = submission->submission_db_id;
     create_request.submission_id = submission->submission_id;
-    create_request.title = truncate_title(
-        request.question.empty() ? diagnosis.summary : request.question);
+    create_request.title = choose_chat_title(
+        diagnosis.summary,
+        request.problem_id,
+        submission->submission_id,
+        request.question);
     create_request.hint_level = request.hint_level;
     create_request.request_id = diagnosis.request_id.empty() ? request_id : diagnosis.request_id;
     create_request.user_content = request.question.empty() ? "请诊断这次提交。" : request.question;
@@ -476,7 +523,10 @@ AssistantDiagnosisResult AiAssistantService::continue_diagnosis_stream(
     append_request.problem_id = detail->conversation.problem_id;
     append_request.submission_db_id = submission->submission_db_id;
     append_request.submission_id = submission->submission_id;
-    append_request.title = detail->conversation.title;
+    append_request.title = choose_chat_title(
+        detail->conversation.title,
+        detail->conversation.problem_id,
+        detail->conversation.submission_id);
     append_request.hint_level = request.hint_level;
     append_request.request_id = diagnosis.request_id.empty() ? request_id : diagnosis.request_id;
     append_request.user_content = request.question.empty() ? "请继续诊断这次提交。" : request.question;
@@ -602,7 +652,11 @@ AssistantChatResult AiAssistantService::start_chat_stream(
     create_request.problem_id = problem_id;
     create_request.submission_db_id = submission_db_id;
     create_request.submission_id = submission_id;
-    create_request.title = truncate_title(request.message);
+    create_request.title = choose_chat_title(
+        chat.title,
+        problem_id,
+        submission_id,
+        request.message);
     create_request.hint_level = request.hint_level;
     create_request.request_id = chat.request_id.empty() ? request_id : chat.request_id;
     create_request.user_content = default_user_message(request.message);
@@ -696,7 +750,10 @@ AssistantChatResult AiAssistantService::continue_chat_stream(
     append_request.problem_id = chat.problem_id ? chat.problem_id : detail->conversation.problem_id;
     append_request.submission_db_id = detail->conversation.submission_db_id;
     append_request.submission_id = chat.submission_id ? chat.submission_id : detail->conversation.submission_id;
-    append_request.title = detail->conversation.title;
+    append_request.title = choose_chat_title(
+        detail->conversation.title,
+        append_request.problem_id,
+        append_request.submission_id);
     append_request.hint_level = request.hint_level;
     append_request.request_id = chat.request_id.empty() ? request_id : chat.request_id;
     append_request.user_content = request.message;

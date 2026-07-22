@@ -96,6 +96,7 @@ ARG PIP_INDEX_URL
 ARG PIP_TRUSTED_HOST
 ARG PIP_DEFAULT_TIMEOUT=300
 ARG PIP_RETRIES=3
+ARG AGENT_PIP_OFFLINE=0
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -127,15 +128,19 @@ PY
 
 RUN echo "Base Python requirements:" \
     && cat /tmp/agent-service-requirements-base.txt \
-    && if find /app/vendor/wheels -type f -name '*.whl' | grep -q .; then \
+    && if [ "$AGENT_PIP_OFFLINE" = "1" ] && find /app/vendor/wheels -type f -name '*.whl' | grep -q .; then \
         python -m pip install --no-index --find-links /app/vendor/wheels -r /tmp/agent-service-requirements-base.txt; \
+    elif find /app/vendor/wheels -type f -name '*.whl' | grep -q .; then \
+        python -m pip install --no-cache-dir --prefer-binary --find-links /app/vendor/wheels --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" -r /tmp/agent-service-requirements-base.txt; \
     else \
         python -m pip install --no-cache-dir --prefer-binary --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" -r /tmp/agent-service-requirements-base.txt; \
     fi \
     && echo "Embedding Python requirements:" \
     && cat /tmp/agent-service-requirements-embedding.txt \
-    && if find /app/vendor/wheels -type f -name '*.whl' | grep -q .; then \
+    && if [ "$AGENT_PIP_OFFLINE" = "1" ] && find /app/vendor/wheels -type f -name '*.whl' | grep -q .; then \
         python -m pip install --no-index --find-links /app/vendor/wheels -r /tmp/agent-service-requirements-embedding.txt; \
+    elif find /app/vendor/wheels -type f -name '*.whl' | grep -q .; then \
+        python -m pip install --no-cache-dir --prefer-binary --find-links /app/vendor/wheels --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" -r /tmp/agent-service-requirements-embedding.txt; \
     else \
         python -m pip install --no-cache-dir --prefer-binary --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" -r /tmp/agent-service-requirements-embedding.txt; \
     fi

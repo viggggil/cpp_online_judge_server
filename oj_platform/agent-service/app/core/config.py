@@ -17,10 +17,12 @@ class Settings(BaseModel):
     oj_read_timeout_seconds: float = 15
     openrouter_api_key: str = ""
     chat_model: str = "deepseek/deepseek-v4-flash"
+    planner_model: str = "deepseek/deepseek-v4-flash"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_read_timeout_seconds: float = 60
     openrouter_provider_sort: str = "throughput"
-    planner_timeout_seconds: float = 20
+    planner_provider_sort: str = "latency"
+    planner_timeout_seconds: float = 28
     answer_stream_idle_timeout_seconds: float = 35
     answer_stream_total_timeout_seconds: float = 150
     answer_fallback_timeout_seconds: float = 45
@@ -38,6 +40,7 @@ def get_settings() -> Settings:
         oj_read_timeout_seconds=float(os.getenv("OJ_READ_TIMEOUT_SECONDS", "15")),
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
         chat_model=os.getenv("CHAT_MODEL", "deepseek/deepseek-v4-flash"),
+        planner_model=os.getenv("PLANNER_MODEL", "deepseek/deepseek-v4-flash"),
         openrouter_base_url=os.getenv(
             "OPENROUTER_BASE_URL",
             "https://openrouter.ai/api/v1",
@@ -49,7 +52,8 @@ def get_settings() -> Settings:
             "OPENROUTER_PROVIDER_SORT",
             "throughput",
         ),
-        planner_timeout_seconds=float(os.getenv("PLANNER_TIMEOUT_SECONDS", "20")),
+        planner_provider_sort=os.getenv("PLANNER_PROVIDER_SORT", "latency"),
+        planner_timeout_seconds=float(os.getenv("PLANNER_TIMEOUT_SECONDS", "28")),
         answer_stream_idle_timeout_seconds=float(
             os.getenv("ANSWER_STREAM_IDLE_TIMEOUT_SECONDS", "35")
         ),

@@ -46,6 +46,7 @@ struct AgentDiagnosisResponse {
 struct AgentChatResponse {
     std::string request_id;
     std::int64_t user_id{0};
+    std::string title;
     std::optional<std::int64_t> problem_id;
     std::optional<std::string> submission_id;
     std::string answer;
