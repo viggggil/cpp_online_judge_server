@@ -3,7 +3,7 @@
 > 文档状态：当前实现说明  
 > 模块目录：`oj_platform/agent-service`  
 > 服务定位：在线判题平台的 AI 编程学习助手后端  
-> 更新时间：2026-07-21
+> 更新时间：2026-07-23
 
 ## 1. 模块定位
 
@@ -11,9 +11,12 @@
 
 当前 Agent 主链路是通用多轮聊天，不再以固定结构化输出为业务中心。用户可以开启新对话，也可以继续历史会话；可以问题目思路、算法概念、提交错误、复杂度、上一轮解释等问题。Agent 会根据本轮问题、最近历史和当前上下文自行规划是否需要查询题目、提交或本地知识库。
 
+当前工作流已经接入 LangGraph `StateGraph`。LangGraph 作为运行时编排层，负责串联 Agent Chat 节点、维护节点间共享状态、根据 Planner 结果做条件分支，并通过 `custom` stream 向外输出过程事件。前端和 `oj_server` 仍然消费原有 SSE 协议，不需要直接感知 LangGraph。
+
 核心职责：
 
 - 基于 LLM Planner 规划本轮回答需要的工具调用。
+- 使用 LangGraph `StateGraph` 编排 prepare、plan、工具执行、资料汇总、回答生成和 finalize 节点。
 - 使用 LangChain `StructuredTool` 封装受控工具。
 - 通过 `oj_server /api/ai/*` 内部接口查询题目、提交和会话数据。
 - 使用 Chroma + fastembed 检索本地 Markdown 知识库。
@@ -34,19 +37,19 @@ oj_server (C++ Crow)
   v
 agent-service (FastAPI)
   |
-  +--> PlannerService
-  |      +--> OpenRouter structured JSON call
+  +--> LangGraph StateGraph
+  |      +--> prepare_node
+  |      +--> plan_node -> PlannerService -> OpenRouter structured JSON call
+  |      +--> emit_plan_preview_node -> custom stream
+  |      +--> execute_tools_node -> ToolExecutor
+  |      +--> collect_sources_node
+  |      +--> build_answer_messages_node -> PromptService
+  |      +--> generate_answer_node -> OpenRouterClient
+  |      +--> finalize_node
   |
-  +--> ToolExecutor
-  |      +--> OjTools -> oj_server /api/ai/*
-  |      +--> retrieve_knowledge -> Chroma / fastembed
-  |
-  +--> PromptService
-  |      +--> LangChain ChatPromptTemplate
-  |
-  +--> OpenRouterClient
-         +--> custom httpx client
-         +--> stream_text / complete_text / invoke_structured
+  +--> OjTools -> oj_server /api/ai/*
+  +--> retrieve_knowledge -> Chroma / fastembed
+  +--> OpenRouterClient -> stream_text / complete_text / invoke_structured
 ```
 
 跨服务边界：
@@ -78,7 +81,7 @@ agent-service (FastAPI)
 | Prompt | LangChain `ChatPromptTemplate` | 用于 planner prompt 和 answer prompt |
 | Tool 抽象 | LangChain `StructuredTool` | OJ 工具和 RAG 工具统一用结构化参数 |
 | LLM Client | 自写 OpenRouter `httpx` client | `langchain-openrouter` 在当前环境测试不稳定，暂不作为主链路 |
-| Planner 模型 | `openai/gpt-4.1-mini:exacto` | 计划阶段优先使用更稳的 tool-calling 路由，默认不再强制 throughput sort |
+| Planner 模型 | `PLANNER_MODEL`，默认 `deepseek/deepseek-v4-flash` | 计划阶段独立配置，默认 provider sort 为 `latency` |
 | RAG 向量库 | Chroma PersistentClient | 数据目录默认 `/app/data/chroma` |
 | Embedding | fastembed | 默认模型 `BAAI/bge-small-zh-v1.5` |
 | 知识库 | Markdown 文件 | 位于 `knowledge/algorithms` 和 `knowledge/problem_hints` |
@@ -101,7 +104,7 @@ agent-service/
 │  ├─ graphs/
 │  │  ├─ chat_graph.py           # LangGraph StateGraph 定义
 │  │  ├─ chat_state.py           # ChatGraphState
-│  │  ├─ nodes.py                # prepare/plan/tools/generate/finalize 节点
+│  │  ├─ nodes.py                # prepare/plan/plan preview/tools/generate/finalize 节点
 │  │  └─ utils.py                # fallback、source 去重、上下文解析
 │  ├─ llm/
 │  │  └─ messages.py             # LangChain message -> OpenRouter message
@@ -162,7 +165,12 @@ prepare_node
 plan_node
   |
   +--> OpenRouter structured JSON
-  +--> PlannerPlan(tool_calls, intent, answer_strategy, rewritten_question)
+  +--> PlannerPlan(tool_calls, intent, answer_strategy, rewritten_question, conversation_title)
+  |
+  v
+emit_plan_preview_node
+  |
+  +--> plan_delta / plan_done events
   |
   +--> 有工具计划: execute_tools_node
   |       |
@@ -212,12 +220,14 @@ class PlannerPlan(BaseModel):
     answer_strategy: str = ""
     intent: str = ""
     rewritten_question: str = ""
+    conversation_title: str = ""
 ```
 
 其中：
 
 - `rewritten_question` 是基于多轮历史和初始上下文重述后的本轮问题。
 - `rewritten_question` 用于消解“这个题”“这份提交”“上一轮”等指代。
+- `conversation_title` 用于给会话生成简短标题，最终随 `done.title` 返回。
 - 如果要调用 RAG，`retrieve_knowledge.query` 应使用 `rewritten_question` 或基于它压缩出的明确检索语句。
 - 后端不会再用正则强行改写 RAG query，只在 query 为空时用 `rewritten_question` 补齐必填参数。
 
@@ -245,8 +255,6 @@ Planner 失败时：
 | `get_submission` | `submission_id` | `oj_server` | 查询当前用户自己的提交、源码和判题摘要 |
 | `get_conversation_history` | `conversation_id`, `limit` | `oj_server` | 查询当前用户指定会话最近消息 |
 | `retrieve_knowledge` | `query`, `problem_id?` | Chroma | 检索本地 Markdown 知识库 |
-
-目前代码中还有 `search_problem` 和 `list_problem_submissions` 的草稿工具，但对应 OJ 能力尚未完整接入，不应视为稳定对外设计。
 
 ## 6. API 设计
 
@@ -350,6 +358,8 @@ SSE 事件：
 | 事件 | 数据 | 说明 |
 | --- | --- | --- |
 | `status` | `{stage, message}` | 阶段状态，如 planning、generating、fallback |
+| `plan_delta` | `{content}` | Planner 计划预览的 Markdown 片段 |
+| `plan_done` | `{intent, tool_count}` | Planner 计划预览结束 |
 | `tool_call` | `{name, arguments, reason}` | 即将调用工具 |
 | `tool_result` | `ToolCallRecord` | 工具调用结果摘要 |
 | `sources` | `{message, sources}` | RAG 来源 |
@@ -363,6 +373,7 @@ SSE 事件：
 {
   "request_id": "req_...",
   "user_id": 1001,
+  "title": "二分思路辨析",
   "conversation_id": "conv_...",
   "problem_id": 1001,
   "submission_id": null,
@@ -393,6 +404,7 @@ SSE 事件：
     "answer_strategy": "结合题面和题解说明为什么不能用二分。",
     "rewritten_question": "题目 1001 为什么不能用二分？",
     "used_non_stream_fallback": false,
+    "workflow_engine": "langgraph",
     "safety_flags": []
   },
   "model": "deepseek/deepseek-v4-flash",
@@ -519,10 +531,12 @@ invoke_structured(messages) # JSON schema 结构化 planner
 | `OJ_READ_TIMEOUT_SECONDS` | OJ client 读超时 | `15` |
 | `OPENROUTER_API_KEY` | OpenRouter API key | 空 |
 | `CHAT_MODEL` | 默认聊天模型 | `deepseek/deepseek-v4-flash` |
+| `PLANNER_MODEL` | Planner 阶段模型 | `deepseek/deepseek-v4-flash` |
 | `OPENROUTER_BASE_URL` | OpenRouter base URL | `https://openrouter.ai/api/v1` |
 | `OPENROUTER_READ_TIMEOUT_SECONDS` | OpenRouter httpx 超时 | `60` |
 | `OPENROUTER_PROVIDER_SORT` | OpenRouter provider 排序 | `throughput` |
-| `PLANNER_TIMEOUT_SECONDS` | planner 阶段超时 | `20` |
+| `PLANNER_PROVIDER_SORT` | Planner provider 排序 | `latency` |
+| `PLANNER_TIMEOUT_SECONDS` | planner 阶段超时 | `28` |
 | `ANSWER_STREAM_IDLE_TIMEOUT_SECONDS` | 流式无 token idle 超时 | `35` |
 | `ANSWER_STREAM_TOTAL_TIMEOUT_SECONDS` | 回答总时长超时 | `150` |
 | `ANSWER_FALLBACK_TIMEOUT_SECONDS` | 非流式补全超时 | `45` |
@@ -572,23 +586,24 @@ curl http://127.0.0.1:8001/health
 curl http://127.0.0.1:8001/ready
 ```
 
-## 12. 当前限制
+## 12. 当前已完成能力
 
-- `search_problem` 和 `list_problem_submissions` 尚未作为稳定工具接入。
-- Tool error 目前主要是字符串摘要，尚未结构化为 `error_code`。
-- planner 和 answer 目前共用 `CHAT_MODEL`，还未拆为独立模型配置。
-- Agent run trace 尚未持久化，排障主要依赖 Docker logs 和 `tool_result`。
-- RAG 当前是 embedding 检索，没有 rerank。
-- LangGraph 当前未启用持久化 checkpointer，只作为运行时编排层。
-
-## 13. 后续演进方向
-
-优先级建议：
-
-1. 隐藏或实现 `search_problem`、`list_problem_submissions`。
-2. Tool result 增加结构化 `error_code`。
-3. 增加 Agent run trace 表或 LangGraph checkpoint 存储，保存 planner plan、tool calls、tool results、fallback 和耗时。
-4. 拆分 `PLANNER_MODEL`、`ANSWER_MODEL`、`FALLBACK_MODEL`。
-5. 增加会话上下文栏，支持用户查看/清除当前题目和提交绑定。
-6. 对 RAG 增加多 query 检索和 rerank。
-7. 建立固定评测集，回放多轮对话、缺参数、RAG、提交错误分析和工具失败场景。
+- 已提供 FastAPI 内部服务入口，包括 `/api/v1/chat/stream`、`/health` 和 `/ready`。
+- 已接入 LangGraph `StateGraph` 作为 Agent Chat 运行时编排层。
+- 已定义 `ChatGraphState`，在节点间传递请求、上下文、工具列表、Planner 计划、工具结果、RAG 来源、回答内容和元数据。
+- 已实现 `prepare_node`、`plan_node`、`emit_plan_preview_node`、`execute_tools_node`、`collect_sources_node`、`build_answer_messages_node`、`generate_answer_node`、`finalize_node`。
+- 已通过条件边根据 `PlannerPlan.tool_calls` 决定是否执行工具；没有工具调用时直接进入资料汇总和回答生成。
+- 已通过 LangGraph `get_stream_writer()` 输出 `custom` stream，并由 `ChatWorkflow` 转换为现有 SSE 事件。
+- 已实现 Planner 结构化输出，包括 `tool_calls`、`intent`、`answer_strategy`、`rewritten_question` 和 `conversation_title`。
+- 已实现 Planner Markdown 计划预览，通过 `plan_delta` 和 `plan_done` 事件输出。
+- 已实现 Planner 超时和异常 fallback，根据明确题目 ID、提交 ID 或消息中的编号生成基础工具调用。
+- 已实现 OJ 受控工具：`get_problem`、`get_submission`、`get_conversation_history`。
+- 已实现 RAG 工具 `retrieve_knowledge`，基于 Chroma + fastembed 检索本地 Markdown 知识库。
+- 已实现工具执行层的参数校验、同名同参去重、未知工具跳过和错误结果记录。
+- 已实现回答 prompt 构造，整合提示等级、多轮历史、初始上下文、Planner 策略和工具结果。
+- 已实现 OpenRouter 自写 `httpx` client，支持流式回答、非流式补全和 JSON schema 结构化调用。
+- 已实现回答流式输出、idle 超时 fallback、总时长 fallback 和非流式补全 fallback。
+- 已实现回答安全后处理，按提示等级限制输出完整可提交代码。
+- 已实现最终 `done` 响应，返回标题、题目 ID、提交 ID、答案、意图、来源、工具调用记录、模型信息和 LangGraph 元数据。
+- 已实现与 `oj_server` 的内部鉴权边界：请求必须携带内部 token，查询私有提交和会话时依赖可信 `user_id`。
+- 已提供知识库入库脚本、OpenRouter 连通性检查脚本、pytest 单测和 ruff 检查命令。
