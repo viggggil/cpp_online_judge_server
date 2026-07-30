@@ -2,6 +2,7 @@ import pytest
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel
 
+from app.clients.judge_client import _normalize_language
 from app.schemas.chat import AgentChatRequest, ConversationHistoryItem, ExecutedToolResult, PlannerToolCall
 from app.schemas.chat import InitialContext, PlannerPlan
 from app.schemas.oj import UserContext
@@ -210,6 +211,62 @@ def test_planner_uses_rewritten_question_when_retrieve_query_is_missing():
         "query": "题目 1001 为什么不能用二分",
         "problem_id": 1001,
     }
+
+
+def test_planner_normalizes_generated_code_tool_arguments():
+    request = AgentChatRequest(
+        user=UserContext(user_id=1001),
+        initial_context=InitialContext(problem_id=1001),
+        message="帮我写个临时代码跑样例验证贪心是否可行",
+    )
+    plan = PlannerPlan(
+        tool_calls=[
+            PlannerToolCall(
+                name="generate_and_run_code",
+                arguments={
+                    "problemId": 1001,
+                    "goal": "验证贪心思路",
+                    "testCases": [{"input": "1\n", "expected_output": "1\n"}],
+                },
+            ),
+        ]
+    )
+
+    normalized = PlannerService()._normalize_plan(request, plan, [])
+
+    assert normalized.tool_calls[0].arguments == {
+        "problem_id": 1001,
+        "objective": "验证贪心思路",
+        "test_cases": [{"input": "1\n", "expected_output": "1\n"}],
+    }
+
+
+def test_generated_code_tool_fills_problem_and_objective_from_context():
+    request = AgentChatRequest(
+        user=UserContext(user_id=1001),
+        initial_context=InitialContext(problem_id=1001),
+        message="运行一份候选解法看看样例能不能过",
+    )
+    plan = PlannerPlan(
+        tool_calls=[
+            PlannerToolCall(
+                name="generate_and_run_code",
+                arguments={},
+            ),
+        ]
+    )
+
+    normalized = PlannerService()._normalize_plan(request, plan, [])
+
+    assert normalized.tool_calls[0].arguments == {
+        "problem_id": 1001,
+        "objective": "运行一份候选解法看看样例能不能过",
+    }
+
+
+def test_judge_client_accepts_cpp_aliases():
+    assert _normalize_language("cpp17") == "cpp"
+    assert _normalize_language("gnu++17") == "cpp"
 
 
 def test_planner_prompt_mentions_contextual_rewrite_for_multiturn_question():

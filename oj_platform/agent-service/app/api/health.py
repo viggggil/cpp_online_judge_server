@@ -24,6 +24,7 @@ class HealthResponse(BaseModel):
     openrouter_configured: bool
     chat_model_configured: bool
     oj_server_configured: bool
+    judge_worker_configured: bool
 
 
 class ReadyResponse(BaseModel):
@@ -76,6 +77,10 @@ def _check_oj_client() -> str:
     return "configured" if _has_env("OJ_SERVER_BASE_URL") else "missing"
 
 
+def _check_judge_worker() -> str:
+    return "configured" if _has_env("JUDGE_WORKER_URL") else "missing"
+
+
 def _check_llm_client() -> str:
     return (
         "configured"
@@ -89,6 +94,7 @@ async def health_check() -> HealthResponse:
     openrouter_configured = _has_env("OPENROUTER_API_KEY")
     chat_model_configured = _has_env("CHAT_MODEL")
     oj_server_configured = _has_env("OJ_SERVER_BASE_URL")
+    judge_worker_configured = _has_env("JUDGE_WORKER_URL")
 
     required_config_present = (
         openrouter_configured
@@ -103,6 +109,7 @@ async def health_check() -> HealthResponse:
         openrouter_configured=openrouter_configured,
         chat_model_configured=chat_model_configured,
         oj_server_configured=oj_server_configured,
+        judge_worker_configured=judge_worker_configured,
     )
 
 
@@ -113,6 +120,7 @@ async def readiness_check() -> ReadyResponse:
         "vector_store": _check_chroma(),
         "embedding": _check_embedding(),
         "oj_client": _check_oj_client(),
+        "judge_worker": _check_judge_worker(),
         "llm_client": _check_llm_client(),
     }
 

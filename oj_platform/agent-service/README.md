@@ -12,6 +12,7 @@
 - Planner 结构化规划工具调用
 - Planner Markdown 计划预览事件：`plan_delta`、`plan_done`
 - OJ 受控工具：题目查询、提交查询、会话历史查询
+- 临时代码执行工具：`generate_and_run_code`，可让受控 LLM 生成 C++ 候选程序并调用 judge_worker 小样例执行
 - RAG 知识库检索工具：`retrieve_knowledge`
 - OpenRouter 自写 `httpx` 客户端
 - 模型流式输出、流式异常 fallback、非流式补全 fallback
@@ -42,7 +43,7 @@ emit_plan_preview_node
   +--> 有工具计划: execute_tools_node
   |       |
   |       +--> ToolExecutor
-  |       +--> OjTools / retrieve_knowledge
+  |       +--> OjTools / generate_and_run_code / retrieve_knowledge
   |
   +--> 无工具计划: 跳过工具
   |
@@ -74,6 +75,7 @@ agent-service/
 │  │  ├─ dependencies.py         # 内部 token / request id 校验
 │  │  └─ health.py               # /health /ready
 │  ├─ clients/
+│  │  ├─ judge_client.py         # 调 judge_worker 临时执行生成代码
 │  │  ├─ oj_client.py            # 调 oj_server 内部 API
 │  │  └─ openrouter_client.py    # OpenRouter HTTP client
 │  ├─ core/
@@ -98,6 +100,7 @@ agent-service/
 │  │  ├─ prompt_service.py       # Planner/Answer prompt
 │  │  └─ safety_service.py       # 回答安全后处理
 │  ├─ tools/
+│  │  ├─ code_execution_tool.py  # LLM 生成临时代码并调用 judge_worker
 │  │  ├─ executor.py             # 工具执行器
 │  │  ├─ oj_tools.py             # OJ 工具
 │  │  └─ rag_tools.py            # RAG 工具
@@ -190,6 +193,43 @@ Accept: text/event-stream
 | `ANSWER_STREAM_IDLE_TIMEOUT_SECONDS` | 流式无增量 idle 超时 | `35` |
 | `ANSWER_STREAM_TOTAL_TIMEOUT_SECONDS` | 回答总时长超时 | `150` |
 | `ANSWER_FALLBACK_TIMEOUT_SECONDS` | 非流式补全超时 | `45` |
+| `JUDGE_WORKER_URL` | judge_worker 临时代码执行接口 | `http://127.0.0.1:18081/api/judge` |
+| `JUDGE_CONNECT_TIMEOUT_SECONDS` | judge_worker 连接超时 | `5` |
+| `JUDGE_READ_TIMEOUT_SECONDS` | judge_worker 读取超时 | `30` |
+| `CODEGEN_MODEL` | 临时代码生成模型，默认跟随回答模型 | `CHAT_MODEL` |
+| `CODEGEN_PROVIDER_SORT` | 临时代码生成 provider 排序 | `latency` |
+| `CODEGEN_MAX_SOURCE_CHARS` | 临时代码最大源码长度 | `30000` |
+| `CODEGEN_MAX_TEST_CASES` | 临时代码最多测试点数 | `6` |
+| `CODEGEN_MAX_TESTCASE_CHARS` | 单个临时测试点输入/输出最大长度 | `20000` |
+
+## 临时代码执行工具
+
+`generate_and_run_code` 是 Agent 内部工具，不是正式提交接口。Planner 只有在用户明确要求“跑样例 / 验证算法 / 构造反例”，或回答确实需要沙盒执行来验证推断时才会调用它。
+
+工具流程：
+
+```text
+problem_id / objective
+  |
+  v
+读取题面
+  |
+  v
+Codegen LLM 生成 C++17 候选程序和小测试点
+  |
+  v
+POST JUDGE_WORKER_URL
+  |
+  v
+返回编译结果、运行状态、每个小测试点的 expected/actual output
+```
+
+注意事项：
+
+- 不写入 `submissions` 表，不影响用户正式提交记录。
+- 只运行小样例或工具生成的临时测试点，不能证明代码可以 AC。
+- 工具结果默认不把完整生成源码交给最终回答模型，避免泄露完整可提交答案。
+- judge_worker 仍然负责实际编译和运行隔离。
 
 ## 本地命令
 

@@ -18,6 +18,7 @@ from app.schemas.chat import AgentChatResponse, ExecutedToolResult, PlannerPlan
 from app.services.planner_service import PlannerService
 from app.services.prompt_service import PromptService
 from app.services.safety_service import SafetyService
+from app.tools.code_execution_tool import CodeExecutionTool
 from app.tools.executor import ToolExecutor
 from app.tools.oj_tools import OjTools
 from app.tools.rag_tools import build_retrieve_knowledge_tool
@@ -40,6 +41,7 @@ async def prepare_node(state: ChatGraphState) -> dict:
             user_id=request.user.user_id,
             request_id=context.request_id,
         ).build_tools(),
+        CodeExecutionTool(request_id=context.request_id).build_tool(),
         build_retrieve_knowledge_tool(),
     ]
     return {

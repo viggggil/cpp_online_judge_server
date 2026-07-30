@@ -110,6 +110,8 @@ def _missing_required_arguments(tool: BaseTool, arguments: dict[str, Any]) -> li
 def _missing_argument_message(tool_name: str, missing: list[str]) -> str:
     if tool_name in {"get_problem", "list_problem_submissions"} and "problem_id" in missing:
         return "缺少 problem_id，无法查询题目信息；请在问题中提供题号，或先选择题目/提交作为上下文。"
+    if tool_name == "generate_and_run_code" and "problem_id" in missing:
+        return "缺少 problem_id，无法生成并执行临时代码；请提供题号，或先选择题目/提交作为上下文。"
     if tool_name == "get_submission" and "submission_id" in missing:
         return "缺少 submission_id，无法查询提交记录；请提供提交编号，或先选择一次提交作为上下文。"
     if tool_name == "get_conversation_history" and "conversation_id" in missing:

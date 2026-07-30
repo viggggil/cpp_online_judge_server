@@ -170,6 +170,33 @@ def _normalize_tool_arguments(
             if problem_id is not None:
                 normalized["problem_id"] = problem_id
 
+    if tool_name == "generate_and_run_code":
+        _rename_first_present(
+            normalized,
+            "problem_id",
+            ["problemId", "problemID", "pid", "problem"],
+        )
+        _rename_first_present(
+            normalized,
+            "objective",
+            ["goal", "task", "question", "purpose", "reason"],
+        )
+        _rename_first_present(
+            normalized,
+            "test_cases",
+            ["testCases", "tests", "cases", "examples"],
+        )
+        if "problem_id" not in normalized and request.initial_context.problem_id is not None:
+            normalized["problem_id"] = request.initial_context.problem_id
+        if "problem_id" not in normalized:
+            problem_id = _extract_problem_id(request.message)
+            if problem_id is not None:
+                normalized["problem_id"] = problem_id
+        if "objective" not in normalized:
+            normalized["objective"] = (
+                request.message if len(request.message) <= 500 else request.message[:500]
+            )
+
     return {
         key: value
         for key, value in normalized.items()

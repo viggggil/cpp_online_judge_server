@@ -26,6 +26,14 @@ class Settings(BaseModel):
     answer_stream_idle_timeout_seconds: float = 35
     answer_stream_total_timeout_seconds: float = 150
     answer_fallback_timeout_seconds: float = 45
+    judge_worker_url: str = "http://127.0.0.1:18081/api/judge"
+    judge_connect_timeout_seconds: float = 5
+    judge_read_timeout_seconds: float = 30
+    codegen_model: str = ""
+    codegen_provider_sort: str = "latency"
+    codegen_max_source_chars: int = 30000
+    codegen_max_test_cases: int = 6
+    codegen_max_testcase_chars: int = 20000
 
 
 def get_settings() -> Settings:
@@ -62,5 +70,20 @@ def get_settings() -> Settings:
         ),
         answer_fallback_timeout_seconds=float(
             os.getenv("ANSWER_FALLBACK_TIMEOUT_SECONDS", "45")
+        ),
+        judge_worker_url=os.getenv(
+            "JUDGE_WORKER_URL",
+            "http://127.0.0.1:18081/api/judge",
+        ),
+        judge_connect_timeout_seconds=float(
+            os.getenv("JUDGE_CONNECT_TIMEOUT_SECONDS", "5")
+        ),
+        judge_read_timeout_seconds=float(os.getenv("JUDGE_READ_TIMEOUT_SECONDS", "30")),
+        codegen_model=os.getenv("CODEGEN_MODEL", os.getenv("CHAT_MODEL", "")),
+        codegen_provider_sort=os.getenv("CODEGEN_PROVIDER_SORT", "latency"),
+        codegen_max_source_chars=int(os.getenv("CODEGEN_MAX_SOURCE_CHARS", "30000")),
+        codegen_max_test_cases=int(os.getenv("CODEGEN_MAX_TEST_CASES", "6")),
+        codegen_max_testcase_chars=int(
+            os.getenv("CODEGEN_MAX_TESTCASE_CHARS", "20000")
         ),
     )
