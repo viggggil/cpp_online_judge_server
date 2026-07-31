@@ -55,10 +55,11 @@ function monitorRenderAgentChecks(checks) {
     config: '配置',
     vector_store: 'Chroma',
     embedding: 'Embedding',
+    judge_worker: 'Judge Worker',
     oj_client: 'OJ Client',
     llm_client: 'OpenRouter',
   };
-  const keys = ['config', 'vector_store', 'embedding', 'oj_client', 'llm_client'];
+  const keys = ['config', 'vector_store', 'embedding', 'judge_worker', 'oj_client', 'llm_client'];
   return keys.map((key) => {
     const value = checks?.[key] || 'unknown';
     return `
